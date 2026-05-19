@@ -12,12 +12,16 @@
 ## Быстрый запуск
 
 ```bash
-pkg install -y curl bash
-curl -fsSL https://raw.githubusercontent.com/OlegGorsky/neurogate-codex-termux/main/setup-neurogate-codex-termux.sh -o setup-neurogate-codex-termux.sh
-bash setup-neurogate-codex-termux.sh
+pkg install -y curl bash && bash -c "$(curl -fsSL https://raw.githubusercontent.com/OlegGorsky/neurogate-codex-termux/main/setup-neurogate-codex-termux.sh)"
 ```
 
 Скрипт попросит NeuroGate API key. Ввод скрыт, ключ в терминал не печатается.
+
+Если `curl` уже установлен:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OlegGorsky/neurogate-codex-termux/main/setup-neurogate-codex-termux.sh)"
+```
 
 ## Что будет записано
 
