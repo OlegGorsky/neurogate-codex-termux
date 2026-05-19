@@ -12,7 +12,7 @@
 ## Быстрый запуск
 
 ```bash
-pkg install -y curl bash && bash -c "$(curl -fsSL https://raw.githubusercontent.com/OlegGorsky/neurogate-codex-termux/main/setup-neurogate-codex-termux.sh)"
+pkg install -y curl bash && bash -c "$(curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i)"
 ```
 
 Скрипт попросит NeuroGate API key. Ввод скрыт, ключ в терминал не печатается.
@@ -20,8 +20,10 @@ pkg install -y curl bash && bash -c "$(curl -fsSL https://raw.githubusercontent.
 Если `curl` уже установлен:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/OlegGorsky/neurogate-codex-termux/main/setup-neurogate-codex-termux.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i)"
 ```
+
+`OlegGorsky/ng` — короткий GitHub-алиас. Он скачивает основной скрипт из этого репозитория и запускает его.
 
 ## Что будет записано
 

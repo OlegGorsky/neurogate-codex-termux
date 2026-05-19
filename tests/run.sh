@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$ROOT_DIR/setup-neurogate-codex-termux.sh"
+BOOTSTRAP="$ROOT_DIR/i"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -79,6 +80,41 @@ cat <<'JSON'
 }
 JSON
 FAKE_CURL
+  chmod +x "$bin_dir/curl"
+}
+
+make_fake_bootstrap_curl() {
+  local bin_dir="$1"
+  cat > "$bin_dir/curl" <<'FAKE_BOOTSTRAP_CURL'
+#!/usr/bin/env bash
+output_path=''
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -o)
+      output_path="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$output_path" ]]; then
+  printf 'missing -o\n' >&2
+  exit 2
+fi
+
+cat > "$output_path" <<'DOWNLOADED_SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'downloaded setup ran'
+for arg in "$@"; do
+  printf ' [%s]' "$arg"
+done
+printf '\n'
+DOWNLOADED_SCRIPT
+FAKE_BOOTSTRAP_CURL
   chmod +x "$bin_dir/curl"
 }
 
@@ -204,9 +240,35 @@ test_requires_key_when_non_interactive() {
   rm -rf "$tmp"
 }
 
+test_bootstrap_downloads_and_runs_setup() {
+  local tmp bin output
+  tmp="$(mktemp -d)"
+  bin="$tmp/bin"
+  mkdir -p "$bin"
+  make_fake_bootstrap_curl "$bin"
+
+  if ! output="$(HOME="$tmp/home" PATH="$bin:$PATH" bash "$BOOTSTRAP" --model gpt-5 2>&1)"; then
+    printf '%s\n' "$output" >&2
+    fail 'short bootstrap exits successfully'
+    rm -rf "$tmp"
+    return
+  fi
+  pass 'short bootstrap exits successfully'
+
+  if [[ "$output" == 'downloaded setup ran [--model] [gpt-5]' ]]; then
+    pass 'short bootstrap runs downloaded setup with arguments'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'short bootstrap runs downloaded setup with arguments'
+  fi
+
+  rm -rf "$tmp"
+}
+
 test_creates_files_and_reports_models
 test_repairs_config_idempotently
 test_requires_key_when_non_interactive
+test_bootstrap_downloads_and_runs_setup
 
 if [[ "$FAIL_COUNT" -gt 0 ]]; then
   printf '\n%d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT" >&2
