@@ -401,6 +401,36 @@ test_desktop_powershell_static_checks() {
   fi
 }
 
+test_pipe_safe_prompt_static_checks() {
+  assert_contains "$SCRIPT" 'read_secret()' 'Termux setup has hidden prompt helper'
+  assert_contains "$SCRIPT" '</dev/tty' 'Termux setup reads prompts from terminal'
+  assert_contains "$DESKTOP_SCRIPT" 'read_secret()' 'Desktop setup has hidden prompt helper'
+  assert_contains "$DESKTOP_SCRIPT" '</dev/tty' 'Desktop setup reads prompts from terminal'
+  assert_contains "$ROOT_DIR/README.md" 'Короткие `curl ... | bash` команды тоже умеют спрашивать ключ' 'README documents pipe-safe key prompt'
+}
+
+test_desktop_interactive_prompt_reads_from_tty() {
+  local tmp output
+  if ! command -v script >/dev/null 2>&1; then
+    pass 'desktop tty prompt check skipped without script command'
+    return
+  fi
+
+  tmp="$(mktemp -d)"
+  if output="$(printf 'tty-test-key\n' | HOME="$tmp/home" CODEX_HOME="$tmp/codex" \
+    script -qfec "bash \"$DESKTOP_SCRIPT\" --skip-api-check --no-image-helper" /dev/null 2>&1)"; then
+    pass 'desktop interactive prompt reads key from tty'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'desktop interactive prompt reads key from tty'
+    rm -rf "$tmp"
+    return
+  fi
+
+  assert_contains "$tmp/codex/auth.json" '"OPENAI_API_KEY": "tty-test-key"' 'desktop tty prompt writes API key'
+  rm -rf "$tmp"
+}
+
 test_image_helper_static_checks() {
   local output
   if ! command -v python3 >/dev/null 2>&1; then
@@ -550,6 +580,8 @@ test_desktop_setup_creates_config_and_image_helper
 test_desktop_setup_reuses_existing_auth_key
 test_desktop_bootstrap_downloads_and_runs_setup
 test_desktop_powershell_static_checks
+test_pipe_safe_prompt_static_checks
+test_desktop_interactive_prompt_reads_from_tty
 test_requires_key_when_non_interactive
 test_bootstrap_downloads_and_runs_setup
 test_image_helper_static_checks

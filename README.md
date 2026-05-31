@@ -1,66 +1,53 @@
 # NeuroGate Codex Setup
 
-Скрипты настраивают Codex CLI и Codex Desktop для работы через NeuroGate API.
+Один репозиторий для двух сценариев:
 
-## Codex Desktop
+- Codex Desktop на Ubuntu/Linux, macOS и Windows.
+- Codex CLI в Termux.
 
-Ubuntu/Linux и macOS:
+Скрипты прописывают NeuroGate API в Codex config, сохраняют ключ в `auth.json`, проверяют `/v1/models` и не печатают API-ключ в терминал.
+
+## Что выбрать
+
+Для Codex Desktop на Ubuntu/Linux или macOS:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/d | bash
 ```
 
-Windows PowerShell:
+Для Codex Desktop на Windows открой PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex
 ```
 
-Desktop-контур меняет provider в `~/.codex/config.toml` или `%USERPROFILE%\.codex\config.toml`, переиспользует существующий ключ из `auth.json` и ставит helper для генерации картинок через NeuroGate. Подробности: [docs/codex-desktop.md](docs/codex-desktop.md).
-
-## Termux
-
-Он создаёт или чинит:
-
-- `~/.codex/config.toml`
-- `~/.codex/auth.json`
-
-После записи файлов скрипт проверяет ключ через `GET /v1/models` и показывает доступные модели.
-
-### Быстрый запуск
+Для Codex CLI в Termux:
 
 ```bash
 pkg install -y curl bash && curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash
 ```
 
-Скрипт попросит NeuroGate API key. Ввод скрыт, ключ в терминал не печатается.
-
-Если `curl` уже установлен:
+Если `curl` в Termux уже установлен:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash
 ```
 
-`OlegGorsky/ng` — короткий GitHub-алиас. Он скачивает основной скрипт из этого репозитория и запускает его.
+## Что будет по шагам
 
-### Обновление
+1. Скрипт найдёт Codex config directory.
+2. Если ключа ещё нет, попросит вставить NeuroGate API key скрытым вводом.
+3. Если `auth.json` уже есть, ключ повторно вводить не нужно.
+4. Скрипт обновит `config.toml` на NeuroGate provider.
+5. Скрипт проверит ключ через `GET https://api.neurogate.space/v1/models`.
+6. Для Codex Desktop дополнительно поставит helper для генерации картинок.
+7. После Desktop-настройки перезапусти Codex Desktop.
 
-Если Codex уже настроен и `~/.codex/auth.json` существует, ключ заново вводить не нужно:
+Короткие `curl ... | bash` команды тоже умеют спрашивать ключ: bash-скрипты читают ввод с терминала, а не из pipe.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash
-```
+## Что записывается
 
-Если проект склонирован локально:
-
-```bash
-git pull --ff-only
-bash setup-neurogate-codex-termux.sh --non-interactive
-```
-
-### Что будет записано
-
-`~/.codex/config.toml`:
+`config.toml`:
 
 ```toml
 model = "gpt-5.5"
@@ -73,7 +60,7 @@ base_url = "https://api.neurogate.space/v1"
 wire_api = "responses"
 ```
 
-`~/.codex/auth.json`:
+`auth.json`:
 
 ```json
 {
@@ -82,42 +69,98 @@ wire_api = "responses"
 }
 ```
 
-### Без интерактива
+Пути:
 
-Если `~/.codex/auth.json` уже есть, можно запустить без переменных окружения:
+- Ubuntu/Linux/macOS/Termux: `~/.codex/config.toml` и `~/.codex/auth.json`
+- Windows: `%USERPROFILE%\.codex\config.toml` и `%USERPROFILE%\.codex\auth.json`
+
+Перед изменением существующих файлов создаются `.bak-YYYYmmdd-HHMMSS` бэкапы.
+
+## Обновление
+
+Запусти ту же команду, что и при установке. Если ключ уже сохранён, скрипт не спросит его заново.
+
+Desktop Ubuntu/Linux/macOS:
 
 ```bash
-bash setup-neurogate-codex-termux.sh --non-interactive
+curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/d | bash
 ```
 
-Для первичной настройки без ввода с клавиатуры передай ключ через переменную окружения:
+Desktop Windows:
 
-```bash
-NEUROGATE_API_KEY='sk-...' bash setup-neurogate-codex-termux.sh --non-interactive
+```powershell
+irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex
 ```
 
-Можно выбрать другую модель для Codex:
+Termux:
 
 ```bash
-NEUROGATE_API_KEY='sk-...' bash setup-neurogate-codex-termux.sh --non-interactive --model gpt-5
+curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash
 ```
 
 ## Генерация изображений
 
-В репозитории есть helper для `/responses` + `image_generation`:
+Desktop-setup ставит helper для `/responses` + `image_generation`.
+
+Ubuntu/Linux/macOS:
+
+```bash
+~/.local/bin/responses-image --list-presets
+~/.local/bin/responses-image generate "cinematic photo of a compact AI workstation" --size wide --quality high
+```
+
+Windows:
+
+```powershell
+python "$env:USERPROFILE\.local\bin\responses-image.py" --list-presets
+python "$env:USERPROFILE\.local\bin\responses-image.py" generate "cinematic photo of a compact AI workstation" --size wide --quality high
+```
+
+Termux или локальный запуск из репозитория:
 
 ```bash
 python3 scripts/responses_image.py generate "cinematic photo of a compact AI workstation" --size wide --quality high
 ```
 
-Подробности и команды установки helper: [docs/responses-image-generation.md](docs/responses-image-generation.md).
+Helper читает ключ из Codex `auth.json`, а `base_url` и модель из активного `model_provider`, поэтому картинки идут через NeuroGate после настройки.
 
-## Безопасность
+Подробности: [docs/responses-image-generation.md](docs/responses-image-generation.md).
 
-- API-ключ не выводится в терминал.
-- `auth.json` создаётся с правами `600`.
-- Перед изменением существующих файлов создаются `.bak-YYYYmmdd-HHMMSS` бэкапы.
-- Существующие настройки в `config.toml` сохраняются, а блок NeuroGate приводится к правильному виду.
+## Локальный запуск из клона
+
+Desktop Ubuntu/Linux/macOS:
+
+```bash
+bash setup-neurogate-codex-desktop.sh
+```
+
+Desktop Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1
+```
+
+Termux:
+
+```bash
+bash setup-neurogate-codex-termux.sh
+```
+
+Без интерактива с переменной окружения:
+
+```bash
+NEUROGATE_API_KEY='...' bash setup-neurogate-codex-desktop.sh --non-interactive
+NEUROGATE_API_KEY='...' bash setup-neurogate-codex-termux.sh --non-interactive
+```
+
+Выбрать другую модель:
+
+```bash
+NEUROGATE_API_KEY='...' bash setup-neurogate-codex-desktop.sh --non-interactive --model gpt-5
+NEUROGATE_API_KEY='...' bash setup-neurogate-codex-termux.sh --non-interactive --model gpt-5
+```
+
+Документация по Desktop: [docs/codex-desktop.md](docs/codex-desktop.md).
 
 ## Проверка
 

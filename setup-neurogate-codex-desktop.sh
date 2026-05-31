@@ -116,6 +116,15 @@ trim_key() {
   printf '%s' "$value"
 }
 
+read_secret() {
+  local __var="$1"
+  if [[ -r /dev/tty ]]; then
+    IFS= read -rs "$__var" </dev/tty
+  else
+    IFS= read -rs "$__var"
+  fi
+}
+
 read_existing_api_key() {
   [[ -f "$AUTH_FILE" ]] || return 1
 
@@ -178,7 +187,7 @@ read_api_key() {
   fi
 
   printf 'Paste NeuroGate API key (hidden input): '
-  IFS= read -rs API_KEY
+  read_secret API_KEY
   printf '\n'
   API_KEY="$(trim_key "$API_KEY")"
 

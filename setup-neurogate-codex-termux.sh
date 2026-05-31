@@ -90,7 +90,7 @@ maybe_install_curl() {
 
   printf 'curl не найден. Установить через pkg install curl? [Y/n] '
   local answer
-  IFS= read -r answer
+  read_line answer
   case "${answer:-Y}" in
     y|Y|yes|YES|д|Д|да|ДА)
       pkg install -y curl
@@ -119,6 +119,24 @@ trim_key() {
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
   printf '%s' "$value"
+}
+
+read_line() {
+  local __var="$1"
+  if [[ -r /dev/tty ]]; then
+    IFS= read -r "$__var" </dev/tty
+  else
+    IFS= read -r "$__var"
+  fi
+}
+
+read_secret() {
+  local __var="$1"
+  if [[ -r /dev/tty ]]; then
+    IFS= read -rs "$__var" </dev/tty
+  else
+    IFS= read -rs "$__var"
+  fi
 }
 
 read_existing_api_key() {
@@ -183,7 +201,7 @@ read_api_key() {
   fi
 
   printf 'Вставь NeuroGate API key (ввод скрыт): '
-  IFS= read -rs API_KEY
+  read_secret API_KEY
   printf '\n'
   API_KEY="$(trim_key "$API_KEY")"
 
