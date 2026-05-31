@@ -3,7 +3,11 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$ROOT_DIR/setup-neurogate-codex-termux.sh"
+DESKTOP_SCRIPT="$ROOT_DIR/setup-neurogate-codex-desktop.sh"
+DESKTOP_PS="$ROOT_DIR/setup-neurogate-codex-desktop.ps1"
 BOOTSTRAP="$ROOT_DIR/i"
+DESKTOP_BOOTSTRAP="$ROOT_DIR/d"
+DESKTOP_BOOTSTRAP_PS="$ROOT_DIR/d.ps1"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -118,6 +122,46 @@ FAKE_BOOTSTRAP_CURL
   chmod +x "$bin_dir/curl"
 }
 
+make_fake_desktop_curl() {
+  local bin_dir="$1"
+  cat > "$bin_dir/curl" <<'FAKE_DESKTOP_CURL'
+#!/usr/bin/env bash
+output_path=''
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -o)
+      output_path="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [[ -n "$output_path" ]]; then
+  cat > "$output_path" <<'PY'
+#!/usr/bin/env python3
+print("responses-image helper")
+PY
+  exit 0
+fi
+
+cat <<'JSON'
+{
+  "object": "list",
+  "data": [
+    { "id": "gpt-5.5" },
+    { "id": "gpt-5" },
+    { "id": "gpt-4.1" }
+  ]
+}
+JSON
+FAKE_DESKTOP_CURL
+  chmod +x "$bin_dir/curl"
+}
+
 run_setup() {
   local home_dir="$1"
   local bin_dir="$2"
@@ -125,6 +169,15 @@ run_setup() {
     HOME="$home_dir" \
     PATH="$bin_dir:$PATH" \
     bash "$SCRIPT" --non-interactive 2>&1
+}
+
+run_desktop_setup() {
+  local home_dir="$1"
+  local bin_dir="$2"
+  NEUROGATE_API_KEY='test-api-key' \
+    HOME="$home_dir" \
+    PATH="$bin_dir:$PATH" \
+    bash "$DESKTOP_SCRIPT" --non-interactive 2>&1
 }
 
 test_creates_files_and_reports_models() {
@@ -239,6 +292,113 @@ JSON
   assert_not_contains_text "$output" 'existing-test-api-key' 'does not print reused API key'
 
   rm -rf "$tmp"
+}
+
+test_desktop_setup_creates_config_and_image_helper() {
+  local tmp bin output helper
+  tmp="$(mktemp -d)"
+  bin="$tmp/bin"
+  helper="$tmp/home/.local/bin/responses-image"
+  mkdir -p "$bin"
+  make_fake_desktop_curl "$bin"
+
+  if ! output="$(run_desktop_setup "$tmp/home" "$bin")"; then
+    printf '%s\n' "$output" >&2
+    fail 'desktop setup exits successfully with env API key'
+    rm -rf "$tmp"
+    return
+  fi
+  pass 'desktop setup exits successfully with env API key'
+
+  assert_file "$tmp/home/.codex/config.toml" 'desktop setup creates config.toml'
+  assert_file "$tmp/home/.codex/auth.json" 'desktop setup creates auth.json'
+  assert_file "$helper" 'desktop setup installs image helper'
+  if [[ -x "$helper" ]]; then
+    pass 'desktop image helper is executable'
+  else
+    fail 'desktop image helper is executable'
+  fi
+  assert_contains "$tmp/home/.codex/config.toml" 'base_url = "https://api.neurogate.space/v1"' 'desktop setup writes NeuroGate base URL'
+  assert_contains "$tmp/home/.codex/auth.json" '"OPENAI_API_KEY": "test-api-key"' 'desktop setup writes API key'
+  assert_not_contains_text "$output" 'test-api-key' 'desktop setup does not print API key'
+
+  rm -rf "$tmp"
+}
+
+test_desktop_setup_reuses_existing_auth_key() {
+  local tmp bin output auth helper
+  tmp="$(mktemp -d)"
+  bin="$tmp/bin"
+  auth="$tmp/home/.codex/auth.json"
+  helper="$tmp/home/.local/bin/responses-image"
+  mkdir -p "$bin" "$(dirname "$auth")"
+  make_fake_desktop_curl "$bin"
+
+  cat > "$auth" <<'JSON'
+{
+  "auth_mode": "apikey",
+  "OPENAI_API_KEY": "existing-test-api-key"
+}
+JSON
+
+  if ! output="$(HOME="$tmp/home" PATH="$bin:$PATH" bash "$DESKTOP_SCRIPT" --non-interactive 2>&1)"; then
+    printf '%s\n' "$output" >&2
+    fail 'desktop setup reuses existing auth.json key'
+    rm -rf "$tmp"
+    return
+  fi
+  pass 'desktop setup reuses existing auth.json key'
+
+  assert_file "$helper" 'desktop setup installs image helper while reusing key'
+  assert_contains "$auth" '"OPENAI_API_KEY": "existing-test-api-key"' 'desktop setup keeps existing API key'
+  assert_not_contains_text "$output" 'existing-test-api-key' 'desktop setup does not print reused API key'
+
+  rm -rf "$tmp"
+}
+
+test_desktop_bootstrap_downloads_and_runs_setup() {
+  local tmp bin output
+  tmp="$(mktemp -d)"
+  bin="$tmp/bin"
+  mkdir -p "$bin"
+  make_fake_bootstrap_curl "$bin"
+
+  if ! output="$(HOME="$tmp/home" PATH="$bin:$PATH" bash "$DESKTOP_BOOTSTRAP" --skip-api-check 2>&1)"; then
+    printf '%s\n' "$output" >&2
+    fail 'desktop short bootstrap exits successfully'
+    rm -rf "$tmp"
+    return
+  fi
+  pass 'desktop short bootstrap exits successfully'
+
+  if [[ "$output" == 'downloaded setup ran [--skip-api-check]' ]]; then
+    pass 'desktop short bootstrap runs downloaded setup with arguments'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'desktop short bootstrap runs downloaded setup with arguments'
+  fi
+
+  rm -rf "$tmp"
+}
+
+test_desktop_powershell_static_checks() {
+  assert_contains "$DESKTOP_PS" 'https://api.neurogate.space/v1' 'PowerShell setup uses NeuroGate base URL'
+  assert_contains "$DESKTOP_PS" 'responses_image.py' 'PowerShell setup installs image helper script'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" 'setup-neurogate-codex-desktop.ps1' 'PowerShell bootstrap points to desktop setup'
+
+  if command -v pwsh >/dev/null 2>&1; then
+    if pwsh -NoProfile -Command '
+      $errors = $null
+      [System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw $args[0]), [ref]$errors) | Out-Null
+      if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }
+    ' "$DESKTOP_PS"; then
+      pass 'PowerShell setup parses with pwsh'
+    else
+      fail 'PowerShell setup parses with pwsh'
+    fi
+  else
+    pass 'PowerShell parse check skipped without pwsh'
+  fi
 }
 
 test_image_helper_static_checks() {
@@ -386,6 +546,10 @@ test_bootstrap_downloads_and_runs_setup() {
 test_creates_files_and_reports_models
 test_repairs_config_idempotently
 test_reuses_existing_auth_key_non_interactive
+test_desktop_setup_creates_config_and_image_helper
+test_desktop_setup_reuses_existing_auth_key
+test_desktop_bootstrap_downloads_and_runs_setup
+test_desktop_powershell_static_checks
 test_requires_key_when_non_interactive
 test_bootstrap_downloads_and_runs_setup
 test_image_helper_static_checks

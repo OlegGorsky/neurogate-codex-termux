@@ -2,7 +2,7 @@
 
 В репозитории есть helper-скрипт [scripts/responses_image.py](../scripts/responses_image.py). Он работает без OpenAI SDK: читает ключ из `OPENAI_API_KEY` или `~/.codex/auth.json`, а URL и модель берёт из `OPENAI_BASE_URL`/`OPENAI_MODEL` или из активного провайдера в `~/.codex/config.toml`.
 
-После запуска основного установщика скрипт автоматически использует:
+После запуска Termux или Desktop установщика скрипт автоматически использует:
 
 ```toml
 model_provider = "NeuroGate API"
@@ -14,11 +14,25 @@ wire_api = "responses"
 
 ## Установка helper-команды
 
-В Termux нужен Python:
+В Termux:
 
 ```bash
 pkg install -y python
 ```
+
+В Ubuntu/Linux:
+
+```bash
+sudo apt update && sudo apt install -y python3 curl
+```
+
+В macOS:
+
+```bash
+brew install python
+```
+
+В Windows нужен Python в `PATH`.
 
 Можно скачать helper как отдельную команду:
 
@@ -32,6 +46,12 @@ chmod +x ~/.local/bin/responses-image
 
 ```bash
 python3 ~/.local/bin/responses-image --list-presets
+```
+
+Windows desktop setup ставит helper сюда:
+
+```powershell
+python "$env:USERPROFILE\.local\bin\responses-image.py" --list-presets
 ```
 
 ## Примеры

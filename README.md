@@ -1,6 +1,24 @@
-# NeuroGate Codex Termux Setup
+# NeuroGate Codex Setup
 
-Скрипт настраивает Codex CLI в Termux для работы через NeuroGate API.
+Скрипты настраивают Codex CLI и Codex Desktop для работы через NeuroGate API.
+
+## Codex Desktop
+
+Ubuntu/Linux и macOS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/d | bash
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex
+```
+
+Desktop-контур меняет provider в `~/.codex/config.toml` или `%USERPROFILE%\.codex\config.toml`, переиспользует существующий ключ из `auth.json` и ставит helper для генерации картинок через NeuroGate. Подробности: [docs/codex-desktop.md](docs/codex-desktop.md).
+
+## Termux
 
 Он создаёт или чинит:
 
@@ -9,7 +27,7 @@
 
 После записи файлов скрипт проверяет ключ через `GET /v1/models` и показывает доступные модели.
 
-## Быстрый запуск
+### Быстрый запуск
 
 ```bash
 pkg install -y curl bash && curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash
@@ -25,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash
 
 `OlegGorsky/ng` — короткий GitHub-алиас. Он скачивает основной скрипт из этого репозитория и запускает его.
 
-## Обновление
+### Обновление
 
 Если Codex уже настроен и `~/.codex/auth.json` существует, ключ заново вводить не нужно:
 
@@ -40,7 +58,7 @@ git pull --ff-only
 bash setup-neurogate-codex-termux.sh --non-interactive
 ```
 
-## Что будет записано
+### Что будет записано
 
 `~/.codex/config.toml`:
 
@@ -64,7 +82,7 @@ wire_api = "responses"
 }
 ```
 
-## Без интерактива
+### Без интерактива
 
 Если `~/.codex/auth.json` уже есть, можно запустить без переменных окружения:
 
@@ -92,7 +110,7 @@ NEUROGATE_API_KEY='sk-...' bash setup-neurogate-codex-termux.sh --non-interactiv
 python3 scripts/responses_image.py generate "cinematic photo of a compact AI workstation" --size wide --quality high
 ```
 
-Подробности и команда установки helper в Termux: [docs/responses-image-generation.md](docs/responses-image-generation.md).
+Подробности и команды установки helper: [docs/responses-image-generation.md](docs/responses-image-generation.md).
 
 ## Безопасность
 
