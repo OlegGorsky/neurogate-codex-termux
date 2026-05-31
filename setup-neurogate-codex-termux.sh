@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROVIDER_NAME='NeuroGate API'
-BASE_URL='https://api.107.172.62.211.sslip.io/v1'
+BASE_URL='https://api.neurogate.space/v1'
 DEFAULT_MODEL='gpt-5.5'
 DEFAULT_REASONING_EFFORT='medium'
 
@@ -18,13 +18,14 @@ Usage:
   bash setup-neurogate-codex-termux.sh [options]
 
 Options:
-  --non-interactive     Do not prompt. Requires NEUROGATE_API_KEY or OPENAI_API_KEY.
+  --non-interactive     Do not prompt. Requires an env key or existing auth.json.
   --model MODEL         Codex model to write to config.toml. Default: gpt-5.5.
   -h, --help            Show this help.
 
 Environment:
   NEUROGATE_API_KEY     Preferred way to pass the key in non-interactive mode.
   OPENAI_API_KEY        Fallback key variable for OpenAI-compatible tooling.
+                         If neither is set, an existing auth.json key is reused.
   CODEX_HOME            Optional Codex config directory. Default: ~/.codex.
 USAGE
 }
@@ -120,9 +121,60 @@ trim_key() {
   printf '%s' "$value"
 }
 
+read_existing_api_key() {
+  [[ -f "$AUTH_FILE" ]] || return 1
+
+  local existing_key=''
+  if command -v python3 >/dev/null 2>&1; then
+    existing_key="$(AUTH_FILE_PATH="$AUTH_FILE" python3 - <<'PY'
+import json
+import os
+
+try:
+    with open(os.environ["AUTH_FILE_PATH"], encoding="utf-8") as fh:
+        payload = json.load(fh)
+except Exception:
+    raise SystemExit(0)
+
+for key in ("OPENAI_API_KEY", "openai_api_key", "api_key"):
+    value = payload.get(key)
+    if isinstance(value, str) and value.strip():
+        print(value.strip())
+        break
+PY
+)"
+  elif command -v node >/dev/null 2>&1; then
+    existing_key="$(AUTH_FILE_PATH="$AUTH_FILE" node -e '
+const fs = require("fs");
+try {
+  const payload = JSON.parse(fs.readFileSync(process.env.AUTH_FILE_PATH, "utf8"));
+  for (const key of ["OPENAI_API_KEY", "openai_api_key", "api_key"]) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) {
+      process.stdout.write(value.trim());
+      break;
+    }
+  }
+} catch (_) {}
+')"
+  elif command -v jq >/dev/null 2>&1; then
+    existing_key="$(jq -r '.OPENAI_API_KEY // .openai_api_key // .api_key // empty' "$AUTH_FILE" 2>/dev/null || true)"
+  else
+    existing_key="$(sed -n 's/^[[:space:]]*"OPENAI_API_KEY"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$AUTH_FILE" | head -n 1)"
+  fi
+
+  existing_key="$(trim_key "$existing_key")"
+  [[ -n "$existing_key" ]] || return 1
+  printf '%s' "$existing_key"
+}
+
 read_api_key() {
   API_KEY="$(trim_key "$API_KEY")"
   if [[ -n "$API_KEY" ]]; then
+    return 0
+  fi
+
+  if API_KEY="$(read_existing_api_key)"; then
     return 0
   fi
 

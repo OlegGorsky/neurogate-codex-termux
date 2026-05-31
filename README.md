@@ -25,6 +25,21 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i)"
 
 `OlegGorsky/ng` — короткий GitHub-алиас. Он скачивает основной скрипт из этого репозитория и запускает его.
 
+## Обновление
+
+Если Codex уже настроен и `~/.codex/auth.json` существует, ключ заново вводить не нужно:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i)" -- --non-interactive
+```
+
+Если проект склонирован локально:
+
+```bash
+git pull --ff-only
+bash setup-neurogate-codex-termux.sh --non-interactive
+```
+
 ## Что будет записано
 
 `~/.codex/config.toml`:
@@ -36,7 +51,7 @@ model_reasoning_effort = "medium"
 
 [model_providers."NeuroGate API"]
 name = "NeuroGate API"
-base_url = "https://api.107.172.62.211.sslip.io/v1"
+base_url = "https://api.neurogate.space/v1"
 wire_api = "responses"
 ```
 
@@ -51,6 +66,14 @@ wire_api = "responses"
 
 ## Без интерактива
 
+Если `~/.codex/auth.json` уже есть, можно запустить без переменных окружения:
+
+```bash
+bash setup-neurogate-codex-termux.sh --non-interactive
+```
+
+Для первичной настройки без ввода с клавиатуры передай ключ через переменную окружения:
+
 ```bash
 NEUROGATE_API_KEY='sk-...' bash setup-neurogate-codex-termux.sh --non-interactive
 ```
@@ -60,6 +83,16 @@ NEUROGATE_API_KEY='sk-...' bash setup-neurogate-codex-termux.sh --non-interactiv
 ```bash
 NEUROGATE_API_KEY='sk-...' bash setup-neurogate-codex-termux.sh --non-interactive --model gpt-5
 ```
+
+## Генерация изображений
+
+В репозитории есть helper для `/responses` + `image_generation`:
+
+```bash
+python3 scripts/responses_image.py generate "cinematic photo of a compact AI workstation" --size wide --quality high
+```
+
+Подробности и команда установки helper в Termux: [docs/responses-image-generation.md](docs/responses-image-generation.md).
 
 ## Безопасность
 
