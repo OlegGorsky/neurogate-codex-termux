@@ -12,7 +12,7 @@
 ## Быстрый запуск
 
 ```bash
-pkg install -y curl bash && bash -c "$(curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i)"
+pkg install -y curl bash && curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash
 ```
 
 Скрипт попросит NeuroGate API key. Ввод скрыт, ключ в терминал не печатается.
@@ -20,7 +20,7 @@ pkg install -y curl bash && bash -c "$(curl -fsSL https://raw.githubusercontent.
 Если `curl` уже установлен:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i)"
+curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash
 ```
 
 `OlegGorsky/ng` — короткий GitHub-алиас. Он скачивает основной скрипт из этого репозитория и запускает его.
@@ -30,7 +30,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i)"
 Если Codex уже настроен и `~/.codex/auth.json` существует, ключ заново вводить не нужно:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i)" -- --non-interactive
+curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash
 ```
 
 Если проект склонирован локально:
