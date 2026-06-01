@@ -21,6 +21,8 @@ curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/d | bash
 irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex
 ```
 
+Если на Windows уже установлен и инициализирован WSL, эта же команда дополнительно пропишет NeuroGate в default WSL-дистрибутив.
+
 Для Codex CLI в Termux:
 
 ```bash
@@ -41,7 +43,8 @@ curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash
 4. Скрипт обновит `config.toml` на NeuroGate provider.
 5. Скрипт проверит ключ через `GET https://api.neurogate.space/v1/models`.
 6. Для Codex Desktop дополнительно поставит helper для генерации картинок.
-7. После Desktop-настройки перезапусти Codex Desktop.
+7. Windows-скрипт проверит WSL и, если default distro готов, запишет туда тот же `config.toml`, `auth.json` и image helper.
+8. После Desktop-настройки перезапусти Codex Desktop.
 
 Короткие `curl ... | bash` команды тоже умеют спрашивать ключ: bash-скрипты читают ввод с терминала, а не из pipe.
 
@@ -73,6 +76,7 @@ wire_api = "responses"
 
 - Ubuntu/Linux/macOS/Termux: `~/.codex/config.toml` и `~/.codex/auth.json`
 - Windows: `%USERPROFILE%\.codex\config.toml` и `%USERPROFILE%\.codex\auth.json`
+- WSL при запуске Windows-скрипта: `~/.codex/config.toml` и `~/.codex/auth.json` внутри default WSL-дистрибутива
 
 Перед изменением существующих файлов создаются `.bak-YYYYmmdd-HHMMSS` бэкапы.
 
@@ -116,6 +120,13 @@ python "$env:USERPROFILE\.local\bin\responses-image.py" --list-presets
 python "$env:USERPROFILE\.local\bin\responses-image.py" generate "cinematic photo of a compact AI workstation" --size wide --quality high
 ```
 
+WSL после Windows-установки:
+
+```bash
+~/.local/bin/responses-image --list-presets
+~/.local/bin/responses-image generate "cinematic photo of a compact AI workstation" --size wide --quality high
+```
+
 Termux или локальный запуск из репозитория:
 
 ```bash
@@ -138,6 +149,8 @@ Desktop Windows:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1
+powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -WslDistro Ubuntu
+powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -NoWsl
 ```
 
 Termux:

@@ -41,6 +41,10 @@ brew install python
 irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex
 ```
 
+Скрипт сначала настраивает Windows-профиль Codex Desktop. Затем он проверяет `wsl.exe`; если WSL установлен и default distro уже инициализирован, туда записываются тот же `~/.codex/config.toml`, `~/.codex/auth.json` и helper `~/.local/bin/responses-image`.
+
+Если WSL установлен, но distro ещё не готов, Windows-настройка всё равно завершается, а WSL-часть пропускается с предупреждением.
+
 Для работы helper-команды генерации изображений нужен Python в `PATH`.
 
 ## Что меняется
@@ -87,6 +91,12 @@ Windows setup скачивает helper в:
 
 ```powershell
 %USERPROFILE%\.local\bin\responses-image.cmd
+```
+
+При наличии WSL Windows setup дополнительно кладёт Linux-helper в:
+
+```bash
+~/.local/bin/responses-image
 ```
 
 Проверка:
@@ -137,4 +147,8 @@ Windows:
 powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -NonInteractive -Model gpt-5
 powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -SkipApiCheck
 powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -NoImageHelper
+powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -WslDistro Ubuntu
+powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -NoWsl
 ```
+
+`-WslDistro Ubuntu` полезен, если default distro не тот. `-NoWsl` оставляет только Windows-настройку.

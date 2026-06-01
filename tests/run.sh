@@ -54,6 +54,17 @@ assert_not_contains_text() {
   fi
 }
 
+assert_not_contains_file() {
+  local path="$1"
+  local needle="$2"
+  local label="$3"
+  if grep -Fq "$needle" "$path"; then
+    fail "$label"
+  else
+    pass "$label"
+  fi
+}
+
 assert_count() {
   local path="$1"
   local needle="$2"
@@ -384,6 +395,12 @@ test_desktop_bootstrap_downloads_and_runs_setup() {
 test_desktop_powershell_static_checks() {
   assert_contains "$DESKTOP_PS" 'https://api.neurogate.space/v1' 'PowerShell setup uses NeuroGate base URL'
   assert_contains "$DESKTOP_PS" 'responses_image.py' 'PowerShell setup installs image helper script'
+  assert_contains "$DESKTOP_PS" '[switch]$NoWsl' 'PowerShell setup can skip WSL setup'
+  assert_contains "$DESKTOP_PS" '[string]$WslDistro' 'PowerShell setup can target a WSL distro'
+  assert_contains "$DESKTOP_PS" 'Get-Command wsl.exe' 'PowerShell setup detects WSL'
+  assert_contains "$DESKTOP_PS" 'Install-WslConfig $apiKey' 'PowerShell setup configures WSL after Windows'
+  assert_contains "$DESKTOP_PS" '$wslScript | & $wsl.Source @wslArgs 2>&1' 'PowerShell setup sends WSL script through stdin'
+  assert_not_contains_file "$DESKTOP_PS" '@("--", "bash", "-s", $ApiKey)' 'PowerShell setup does not pass API key as WSL argument'
   assert_contains "$DESKTOP_BOOTSTRAP_PS" 'setup-neurogate-codex-desktop.ps1' 'PowerShell bootstrap points to desktop setup'
 
   if command -v pwsh >/dev/null 2>&1; then
@@ -399,6 +416,60 @@ test_desktop_powershell_static_checks() {
   else
     pass 'PowerShell parse check skipped without pwsh'
   fi
+}
+
+test_desktop_powershell_wsl_embedded_script() {
+  local tmp script provider_b64 base_url_b64 model_b64 effort_b64 auth_b64 helper_b64 output
+  if ! command -v base64 >/dev/null 2>&1; then
+    pass 'PowerShell WSL embedded script check skipped without base64'
+    return
+  fi
+
+  script="$(sed -n "/^[[:space:]]*\\\$wslScript = @'$/,/^'@$/p" "$DESKTOP_PS" | sed '1d;$d')"
+  if [[ -n "$script" ]]; then
+    pass 'PowerShell WSL embedded script can be extracted'
+  else
+    fail 'PowerShell WSL embedded script can be extracted'
+    return
+  fi
+
+  provider_b64="$(printf '%s' 'NeuroGate API' | base64 | tr -d '\n')"
+  base_url_b64="$(printf '%s' 'https://api.neurogate.space/v1' | base64 | tr -d '\n')"
+  model_b64="$(printf '%s' 'gpt-5.5' | base64 | tr -d '\n')"
+  effort_b64="$(printf '%s' 'medium' | base64 | tr -d '\n')"
+  auth_b64="$(printf '{\n  "auth_mode": "apikey",\n  "OPENAI_API_KEY": "test-api-key"\n}\n' | base64 | tr -d '\n')"
+  helper_b64="$(printf '#!/usr/bin/env python3\nprint("helper")\n' | base64 | tr -d '\n')"
+
+  script="${script//__PROVIDER_B64__/$provider_b64}"
+  script="${script//__BASE_URL_B64__/$base_url_b64}"
+  script="${script//__MODEL_B64__/$model_b64}"
+  script="${script//__EFFORT_B64__/$effort_b64}"
+  script="${script//__AUTH_B64__/$auth_b64}"
+  script="${script//__HELPER_B64__/$helper_b64}"
+
+  tmp="$(mktemp -d)"
+  if output="$(HOME="$tmp/home" bash -s <<< "$script" 2>&1)"; then
+    pass 'PowerShell WSL embedded script runs under bash'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'PowerShell WSL embedded script runs under bash'
+    rm -rf "$tmp"
+    return
+  fi
+
+  assert_file "$tmp/home/.codex/config.toml" 'PowerShell WSL script creates config.toml'
+  assert_file "$tmp/home/.codex/auth.json" 'PowerShell WSL script creates auth.json'
+  assert_file "$tmp/home/.local/bin/responses-image" 'PowerShell WSL script installs image helper'
+  if [[ -x "$tmp/home/.local/bin/responses-image" ]]; then
+    pass 'PowerShell WSL image helper is executable'
+  else
+    fail 'PowerShell WSL image helper is executable'
+  fi
+  assert_contains "$tmp/home/.codex/config.toml" 'base_url = "https://api.neurogate.space/v1"' 'PowerShell WSL script writes NeuroGate base URL'
+  assert_contains "$tmp/home/.codex/auth.json" '"OPENAI_API_KEY": "test-api-key"' 'PowerShell WSL script writes API key'
+  assert_not_contains_text "$output" 'test-api-key' 'PowerShell WSL script does not print API key'
+
+  rm -rf "$tmp"
 }
 
 test_pipe_safe_prompt_static_checks() {
@@ -580,6 +651,7 @@ test_desktop_setup_creates_config_and_image_helper
 test_desktop_setup_reuses_existing_auth_key
 test_desktop_bootstrap_downloads_and_runs_setup
 test_desktop_powershell_static_checks
+test_desktop_powershell_wsl_embedded_script
 test_pipe_safe_prompt_static_checks
 test_desktop_interactive_prompt_reads_from_tty
 test_requires_key_when_non_interactive
