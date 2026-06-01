@@ -90,6 +90,12 @@ wire_api = "responses"
 $env:NEUROGATE_KEY_FROM_CLIPBOARD='1'; irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex; Remove-Item Env:\NEUROGATE_KEY_FROM_CLIPBOARD
 ```
 
+## Важно про окно авторизации Codex Desktop
+
+Скрипт не авторизует подписку ChatGPT внутри интерфейса Codex Desktop. Он настраивает API-режим: записывает NeuroGate provider в `config.toml` и API-ключ в `auth.json`.
+
+Если после установки Codex Desktop показывает экран выбора авторизации, выбирай вариант с API, а не подписку. После этого перезапусти Codex Desktop. Если приложение снова просит ключ, проверь, что файлы лежат именно в `%USERPROFILE%\.codex` на Windows или в `~/.codex` внутри выбранного WSL/default user.
+
 ## Обновление
 
 Запусти ту же команду, что и при установке. Если ключ уже сохранён, скрипт спросит, оставить его или заменить. Для обычного обновления нажми Enter. Чтобы заменить ключ, введи `r` или сразу вставь новый ключ в этот маскированный prompt.

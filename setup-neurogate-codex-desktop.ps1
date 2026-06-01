@@ -73,11 +73,11 @@ function Read-ClipboardApiKey {
     try {
         $value = (Get-Clipboard -ErrorAction Stop) -join [Environment]::NewLine
     } catch {
-        Die "Could not read API key from clipboard."
+        Die "Не удалось прочитать API-ключ из буфера обмена."
     }
 
     if (-not $value -or -not $value.Trim()) {
-        Die "Clipboard does not contain an API key."
+        Die "В буфере обмена нет API-ключа."
     }
 
     return $value.Trim()
@@ -131,13 +131,13 @@ function Read-MaskedInput([string]$Prompt) {
 
 function Read-NewApiKey {
     if ($KeyFromClipboard -or (Test-EnvFlag $env:NEUROGATE_KEY_FROM_CLIPBOARD)) {
-        Log "Reading NeuroGate API key from clipboard"
+        Log "Читаю NeuroGate API key из буфера обмена"
         return Read-ClipboardApiKey
     }
 
-    $plain = Read-MaskedInput "Paste NeuroGate API key"
+    $plain = Read-MaskedInput "Вставь NeuroGate API key"
     if (-not $plain -or -not $plain.Trim()) {
-        Die "API key not found."
+        Die "API-ключ не найден."
     }
     return $plain.Trim()
 }
@@ -173,7 +173,7 @@ function Read-ApiKey {
     $existingKey = Read-ExistingApiKey
     if ($existingKey -and -not $replaceExisting) {
         if (-not $NonInteractive) {
-            $answer = Read-MaskedInput "Saved NeuroGate API key found. Enter=reuse, r=replace, or paste new key"
+            $answer = Read-MaskedInput "Сохранённый NeuroGate API key найден. Enter = оставить, r = заменить, или вставь новый ключ"
             $answer = $answer.Trim()
             if (-not $answer) {
                 return $existingKey
@@ -188,9 +188,9 @@ function Read-ApiKey {
 
     if ($NonInteractive) {
         if ($replaceExisting) {
-            Die "API key replacement requested. Set NEUROGATE_API_KEY or run interactively."
+            Die "Запрошена замена API-ключа. Передай NEUROGATE_API_KEY или запусти скрипт интерактивно."
         }
-        Die "API key not found. Set NEUROGATE_API_KEY or run interactively once."
+        Die "API-ключ не найден. Передай NEUROGATE_API_KEY или один раз запусти скрипт интерактивно."
     }
 
     return Read-NewApiKey
@@ -204,7 +204,7 @@ function Backup-File([string]$Path) {
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $backup = "$Path.bak-$stamp"
     Copy-Item -LiteralPath $Path -Destination $backup -Force
-    Log "Backup: $backup"
+    Log "Бэкап: $backup"
 }
 
 function Set-PrivateFilePermissions([string]$Path) {
@@ -221,7 +221,7 @@ function Set-PrivateFilePermissions([string]$Path) {
         $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
         & $icacls.Source $Path /inheritance:r /grant:r "${user}:F" | Out-Null
     } catch {
-        Warn "Could not set private ACL on $Path"
+        Warn "Не удалось выставить приватные ACL для $Path"
     }
 }
 
@@ -391,7 +391,7 @@ function Format-ApiCheckError($ErrorRecord, [string]$ApiKey) {
     }
 
     $suffix = if ($details.Count) { " Details: $($details -join ' | ')" } else { "" }
-    return "Failed to check /v1/models. Settings were written, but the API check failed.$suffix"
+    return "Не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл.$suffix"
 }
 
 function Check-Models([string]$ApiKey) {
@@ -411,7 +411,7 @@ function Check-Models([string]$ApiKey) {
     }
 
     if (-not $models.Count) {
-        Die "API responded, but no models were found."
+        Die "API ответил, но список моделей не удалось прочитать."
     }
 
     return $models | Select-Object -Unique
@@ -430,10 +430,10 @@ function Install-ImageHelper {
     $helperName = Split-Path -Leaf $ImageHelperPath
     $cmdBody = "@echo off`r`npython `"%~dp0$helperName`" %*`r`n"
     Write-TextNoBom $cmdPath $cmdBody
-    Log "Image helper: $ImageHelperPath"
-    Log "Image helper wrapper: $cmdPath"
+    Log "Helper для картинок: $ImageHelperPath"
+    Log "Wrapper helper для картинок: $cmdPath"
     if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-        Warn "python was not found in PATH. Install Python before using responses-image."
+        Warn "python не найден в PATH. Установи Python перед использованием responses-image."
     }
 }
 
@@ -462,21 +462,21 @@ function Test-WslReady {
 
 function Install-WslConfig([string]$ApiKey) {
     if ($NoWsl) {
-        Log "Skipped WSL setup"
+        Log "Настройка WSL пропущена"
         return
     }
 
     $wsl = Get-WslCommand
     if (-not $wsl) {
-        Log "WSL not found, skipped WSL setup"
+        Log "WSL не найден, настройка WSL пропущена"
         return
     }
 
     if (-not (Test-WslReady)) {
         if ($WslDistro) {
-            Warn "WSL distro '$WslDistro' is not ready, skipped WSL setup"
+            Warn "WSL-дистрибутив '$WslDistro' не готов, настройка WSL пропущена"
         } else {
-            Warn "WSL is installed but no default distro is ready, skipped WSL setup"
+            Warn "WSL установлен, но default distro не готов, настройка WSL пропущена"
         }
         return
     }
@@ -633,42 +633,42 @@ printf 'home=%s\n' "$HOME"
 
         $userLabel = if ($wslUser) { ", user $wslUser" } else { "" }
         if ($WslDistro) {
-            Log "WSL Codex config dir ($WslDistro$userLabel): $target"
+            Log "Папка Codex в WSL ($WslDistro$userLabel): $target"
         } else {
-            Log "WSL Codex config dir${userLabel}: $target"
+            Log "Папка Codex в WSL${userLabel}: $target"
         }
         if ($wslHome) {
             Log "WSL HOME: $wslHome"
         }
         if ($helperB64) {
-            Log "WSL image helper: ~/.local/bin/responses-image"
+            Log "Helper картинок в WSL: ~/.local/bin/responses-image"
         }
     } else {
-        Warn "WSL setup failed: $($output -join ' ')"
+        Warn "Настройка WSL не удалась: $($output -join ' ')"
     }
 }
 
 $apiKey = Read-ApiKey
 
-Log "Codex Desktop config dir: $CodexDir"
+Log "Папка Codex Desktop: $CodexDir"
 Write-Config
 Write-Auth $apiKey
 Install-ImageHelper
 Install-WslConfig $apiKey
 
 if ($SkipApiCheck) {
-    Log "Skipped /v1/models check"
+    Log "Проверка /v1/models пропущена"
 } else {
-    Log "Checking NeuroGate API through /v1/models..."
+    Log "Проверяю NeuroGate API через /v1/models..."
     $models = Check-Models $apiKey
     Log ""
-    Log "API ready"
-    Log "Available models:"
+    Log "API готов"
+    Log "Доступные модели:"
     foreach ($item in $models) {
         Log " - $item"
     }
 }
 
 Log ""
-Log "Restart Codex Desktop to make sure it reloads the provider config."
-Log "Image generation helper example: python `"$ImageHelperPath`" --list-presets"
+Log "Перезапусти Codex Desktop, чтобы он перечитал provider config."
+Log "Пример helper для генерации картинок: python `"$ImageHelperPath`" --list-presets"

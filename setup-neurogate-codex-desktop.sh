@@ -17,26 +17,26 @@ IMAGE_HELPER_PATH="${NEUROGATE_IMAGE_HELPER_PATH:-$HOME/.local/bin/responses-ima
 
 usage() {
   cat <<USAGE
-NeuroGate API setup for Codex Desktop on Linux and macOS.
+Настройка NeuroGate API для Codex Desktop на Linux и macOS.
 
-Usage:
+Использование:
   bash setup-neurogate-codex-desktop.sh [options]
 
-Options:
-  --non-interactive       Do not prompt. Requires an env key or existing auth.json.
-  --model MODEL           Codex model to write to config.toml. Default: gpt-5.5.
-  --skip-api-check        Write files without calling /v1/models.
-  --no-image-helper       Do not install the responses-image helper command.
-  --replace-key           Ask for a new key instead of reusing auth.json.
-  --image-helper-path P   Where to install responses-image. Default: ~/.local/bin/responses-image.
-  -h, --help              Show this help.
+Опции:
+  --non-interactive       Не спрашивать ввод. Нужен ключ в env или существующий auth.json.
+  --model MODEL           Модель Codex для config.toml. По умолчанию: gpt-5.5.
+  --skip-api-check        Записать файлы без проверки /v1/models.
+  --no-image-helper       Не ставить команду responses-image.
+  --replace-key           Попросить новый ключ вместо переиспользования auth.json.
+  --image-helper-path P   Куда поставить responses-image. По умолчанию: ~/.local/bin/responses-image.
+  -h, --help              Показать эту справку.
 
-Environment:
-  NEUROGATE_API_KEY       Preferred way to pass the key in non-interactive mode.
-  OPENAI_API_KEY          Fallback key variable for OpenAI-compatible tooling.
-                           If neither is set, an existing auth.json key is reused.
-  NEUROGATE_REPLACE_KEY   Set to 1 to replace an existing auth.json key.
-  CODEX_HOME              Optional Codex Desktop config directory. Default: ~/.codex.
+Переменные окружения:
+  NEUROGATE_API_KEY       Основной способ передать ключ в non-interactive режиме.
+  OPENAI_API_KEY          Запасная переменная для OpenAI-compatible инструментов.
+                          Если обе пустые, переиспользуется ключ из auth.json.
+  NEUROGATE_REPLACE_KEY   Установи 1, чтобы заменить сохранённый ключ.
+  CODEX_HOME              Необязательная папка конфига Codex Desktop. По умолчанию: ~/.codex.
 USAGE
 }
 
@@ -45,11 +45,11 @@ log() {
 }
 
 warn() {
-  printf 'Warning: %s\n' "$*" >&2
+  printf 'Внимание: %s\n' "$*" >&2
 }
 
 die() {
-  printf 'Error: %s\n' "$*" >&2
+  printf 'Ошибка: %s\n' "$*" >&2
   exit 1
 }
 
@@ -60,7 +60,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --model)
-      [[ $# -ge 2 ]] || die '--model requires a value'
+      [[ $# -ge 2 ]] || die '--model требует значение'
       MODEL="$2"
       shift 2
       ;;
@@ -77,7 +77,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --image-helper-path)
-      [[ $# -ge 2 ]] || die '--image-helper-path requires a value'
+      [[ $# -ge 2 ]] || die '--image-helper-path требует значение'
       IMAGE_HELPER_PATH="$2"
       shift 2
       ;;
@@ -86,7 +86,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      die "unknown argument: $1"
+      die "неизвестный аргумент: $1"
       ;;
   esac
 done
@@ -100,7 +100,7 @@ maybe_install_curl() {
     return 0
   fi
 
-  die 'curl is required. Install it first, then rerun this script'
+  die 'curl нужен для установки. Установи curl и запусти скрипт снова'
 }
 
 json_escape() {
@@ -230,12 +230,12 @@ try {
 }
 
 prompt_new_api_key() {
-  printf 'Paste NeuroGate API key (one * per character): '
+  printf 'Вставь NeuroGate API key (одна * на символ): '
   read_secret API_KEY
   printf '\n'
   API_KEY="$(trim_key "$API_KEY")"
 
-  [[ -n "$API_KEY" ]] || die 'API key not found'
+  [[ -n "$API_KEY" ]] || die 'API-ключ не найден'
 }
 
 read_api_key() {
@@ -247,7 +247,7 @@ read_api_key() {
   local existing_key replace_answer
   if existing_key="$(read_existing_api_key)" && ! is_truthy "$REPLACE_KEY"; then
     if [[ "$NON_INTERACTIVE" -eq 0 ]]; then
-      printf 'Saved NeuroGate API key found. Enter=reuse, r=replace, or paste new key (masked): '
+      printf 'Сохранённый NeuroGate API key найден. Enter = оставить, r = заменить, или вставь новый ключ (маска): '
       read_secret replace_answer
       printf '\n'
       replace_answer="$(trim_key "$replace_answer")"
@@ -270,9 +270,9 @@ read_api_key() {
 
   if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
     if is_truthy "$REPLACE_KEY"; then
-      die 'API key replacement requested. Set NEUROGATE_API_KEY or run interactively'
+      die 'Запрошена замена API-ключа. Передай NEUROGATE_API_KEY или запусти скрипт интерактивно'
     fi
-    die 'API key not found. Set NEUROGATE_API_KEY or run interactively once'
+    die 'API-ключ не найден. Передай NEUROGATE_API_KEY или один раз запусти скрипт интерактивно'
   fi
 
   prompt_new_api_key
@@ -458,21 +458,21 @@ check_models() {
   if [[ "$curl_status" -ne 0 ]]; then
     error_text="$(trim_error_details "$error_text")"
     if [[ -n "$error_text" ]]; then
-      die "failed to check /v1/models. Settings were written, but the API check failed. Details: $error_text"
+      die "не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл. Детали: $error_text"
     fi
-    die "failed to check /v1/models. Settings were written, but the API check failed. curl exit code: $curl_status"
+    die "не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл. curl exit code: $curl_status"
   fi
 
   if [[ ! "$status" =~ ^2 ]]; then
     response="$(trim_error_details "$response")"
     if [[ -n "$response" ]]; then
-      die "failed to check /v1/models. Settings were written, but the API check failed. Details: HTTP $status | $response"
+      die "не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл. Детали: HTTP $status | $response"
     fi
-    die "failed to check /v1/models. Settings were written, but the API check failed. Details: HTTP $status"
+    die "не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл. Детали: HTTP $status"
   fi
 
   models="$(extract_models "$response" | awk 'NF && !seen[$0]++')"
-  [[ -n "$models" ]] || die 'API responded, but no models were found'
+  [[ -n "$models" ]] || die 'API ответил, но список моделей не удалось прочитать'
 
   printf '%s\n' "$models"
 }
@@ -485,9 +485,9 @@ install_image_helper() {
   mkdir -p "$helper_dir"
   curl -fsSL "$IMAGE_HELPER_URL" -o "$IMAGE_HELPER_PATH"
   chmod +x "$IMAGE_HELPER_PATH"
-  log "Image helper: $IMAGE_HELPER_PATH"
+  log "Helper для картинок: $IMAGE_HELPER_PATH"
   if ! command -v python3 >/dev/null 2>&1; then
-    warn 'python3 was not found in PATH. Install Python before using responses-image.'
+    warn 'python3 не найден в PATH. Установи Python перед использованием responses-image.'
   fi
 }
 
@@ -495,29 +495,29 @@ main() {
   maybe_install_curl
   read_api_key
 
-  log "Codex Desktop config dir: $CODEX_DIR"
+  log "Папка Codex Desktop: $CODEX_DIR"
   write_config
   write_auth
   install_image_helper
 
   if [[ "$SKIP_API_CHECK" -eq 1 ]]; then
-    log 'Skipped /v1/models check'
+    log 'Проверка /v1/models пропущена'
   else
-    log 'Checking NeuroGate API through /v1/models...'
+    log 'Проверяю NeuroGate API через /v1/models...'
     local models
     models="$(check_models)"
 
     log ''
-    log 'API ready'
-    log 'Available models:'
+    log 'API готов'
+    log 'Доступные модели:'
     while IFS= read -r model_id; do
       [[ -n "$model_id" ]] && printf ' - %s\n' "$model_id"
     done <<< "$models"
   fi
 
   log ''
-  log 'Restart Codex Desktop to make sure it reloads the provider config.'
-  log "Image generation helper example: $IMAGE_HELPER_PATH --list-presets"
+  log 'Перезапусти Codex Desktop, чтобы он перечитал provider config.'
+  log "Пример helper для генерации картинок: $IMAGE_HELPER_PATH --list-presets"
 }
 
 main "$@"

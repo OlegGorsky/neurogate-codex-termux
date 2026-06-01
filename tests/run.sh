@@ -567,7 +567,7 @@ test_desktop_api_check_reports_safe_details() {
   assert_file "$tmp/home/.codex/config.toml" 'desktop setup writes config before failed API check'
   assert_file "$tmp/home/.codex/auth.json" 'desktop setup writes auth before failed API check'
 
-  if [[ "$output" == *'HTTP 401'* && "$output" == *'Settings were written'* ]]; then
+  if [[ "$output" == *'HTTP 401'* && "$output" == *'Настройки записаны'* ]]; then
     pass 'desktop setup reports safe API check details'
   else
     printf '%s\n' "$output" >&2
@@ -615,8 +615,11 @@ test_desktop_powershell_static_checks() {
   assert_contains "$DESKTOP_PS" '[switch]$KeyFromClipboard' 'PowerShell setup can read key from clipboard'
   assert_contains "$DESKTOP_PS" 'NEUROGATE_KEY_FROM_CLIPBOARD' 'PowerShell setup supports clipboard env flag'
   assert_contains "$DESKTOP_PS" 'Get-Clipboard' 'PowerShell setup reads clipboard when requested'
-  assert_contains "$DESKTOP_PS" 'Read-MaskedInput "Paste NeuroGate API key"' 'PowerShell setup uses masked key input'
-  assert_contains "$DESKTOP_PS" 'Read-MaskedInput "Saved NeuroGate API key found. Enter=reuse, r=replace, or paste new key"' 'PowerShell setup masks existing-key choice prompt'
+  assert_contains "$DESKTOP_PS" 'Read-MaskedInput "Вставь NeuroGate API key"' 'PowerShell setup uses masked key input'
+  assert_contains "$DESKTOP_PS" 'Read-MaskedInput "Сохранённый NeuroGate API key найден. Enter = оставить, r = заменить, или вставь новый ключ"' 'PowerShell setup masks existing-key choice prompt'
+  assert_not_contains_file "$DESKTOP_PS" 'Saved NeuroGate API key found' 'PowerShell setup does not show English saved-key prompt'
+  assert_not_contains_file "$DESKTOP_SCRIPT" 'Saved NeuroGate API key found' 'Desktop bash setup does not show English saved-key prompt'
+  assert_not_contains_file "$DESKTOP_SCRIPT" 'Paste NeuroGate API key' 'Desktop bash setup does not show English key prompt'
   assert_contains "$DESKTOP_PS" 'Write-Host -NoNewline "*"' 'PowerShell setup prints one mask star per key character'
   assert_contains "$DESKTOP_PS" '[ConsoleKey]::Backspace' 'PowerShell masked key input supports backspace'
   assert_not_contains_file "$DESKTOP_PS" 'Read-Host -Prompt "Saved NeuroGate API key found' 'PowerShell setup does not use visible input for existing-key prompt'
@@ -625,7 +628,7 @@ test_desktop_powershell_static_checks() {
   assert_contains "$DESKTOP_PS" '$wslScript | & $wsl.Source @wslArgs 2>&1' 'PowerShell setup sends WSL script through stdin'
   assert_not_contains_file "$DESKTOP_PS" '@("--", "bash", "-s", $ApiKey)' 'PowerShell setup does not pass API key as WSL argument'
   assert_contains "$DESKTOP_PS" 'Format-ApiCheckError $_ $ApiKey' 'PowerShell setup reports API check details'
-  assert_contains "$DESKTOP_PS" 'Settings were written, but the API check failed' 'PowerShell setup explains files stay written after API check failure'
+  assert_contains "$DESKTOP_PS" 'Настройки записаны, но контрольный запрос к API не прошёл' 'PowerShell setup explains files stay written after API check failure'
   assert_contains "$DESKTOP_PS" 'Bearer [redacted]' 'PowerShell setup redacts bearer tokens in errors'
   assert_contains "$DESKTOP_BOOTSTRAP_PS" 'setup-neurogate-codex-desktop.ps1' 'PowerShell bootstrap points to desktop setup'
 
