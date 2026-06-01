@@ -568,6 +568,7 @@ test_desktop_bootstrap_downloads_and_runs_setup() {
 }
 
 test_desktop_powershell_static_checks() {
+  local invalid_var_colon
   assert_contains "$DESKTOP_PS" 'https://api.neurogate.space/v1' 'PowerShell setup uses NeuroGate base URL'
   assert_contains "$DESKTOP_PS" 'responses_image.py' 'PowerShell setup installs image helper script'
   assert_contains "$DESKTOP_PS" '[switch]$NoWsl' 'PowerShell setup can skip WSL setup'
@@ -587,6 +588,14 @@ test_desktop_powershell_static_checks() {
   assert_contains "$DESKTOP_PS" 'Settings were written, but the API check failed' 'PowerShell setup explains files stay written after API check failure'
   assert_contains "$DESKTOP_PS" 'Bearer [redacted]' 'PowerShell setup redacts bearer tokens in errors'
   assert_contains "$DESKTOP_BOOTSTRAP_PS" 'setup-neurogate-codex-desktop.ps1' 'PowerShell bootstrap points to desktop setup'
+
+  invalid_var_colon="$(grep -Pn '\$[A-Za-z_][A-Za-z0-9_]*:' "$DESKTOP_PS" | grep -Pv '\$(env|global|script|local|private|using|variable|function):' || true)"
+  if [[ -z "$invalid_var_colon" ]]; then
+    pass 'PowerShell setup has no unbraced variable before colon'
+  else
+    printf '%s\n' "$invalid_var_colon" >&2
+    fail 'PowerShell setup has no unbraced variable before colon'
+  fi
 
   if command -v pwsh >/dev/null 2>&1; then
     if pwsh -NoProfile -Command '

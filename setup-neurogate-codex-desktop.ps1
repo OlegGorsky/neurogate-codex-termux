@@ -630,7 +630,7 @@ printf 'home=%s\n' "$HOME"
         if ($WslDistro) {
             Log "WSL Codex config dir ($WslDistro$userLabel): $target"
         } else {
-            Log "WSL Codex config dir$userLabel: $target"
+            Log "WSL Codex config dir${userLabel}: $target"
         }
         if ($wslHome) {
             Log "WSL HOME: $wslHome"
