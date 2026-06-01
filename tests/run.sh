@@ -507,6 +507,44 @@ JSON
   rm -rf "$tmp"
 }
 
+test_desktop_setup_masks_direct_key_paste_over_existing_auth() {
+  local tmp auth output
+  if ! command -v script >/dev/null 2>&1; then
+    pass 'desktop direct key paste prompt check skipped without script command'
+    return
+  fi
+
+  tmp="$(mktemp -d)"
+  auth="$tmp/home/.codex/auth.json"
+  mkdir -p "$(dirname "$auth")"
+  cat > "$auth" <<'JSON'
+{
+  "auth_mode": "apikey",
+  "OPENAI_API_KEY": "old-test-api-key"
+}
+JSON
+
+  if output="$(printf 'direct-test-api-key\n' | HOME="$tmp/home" CODEX_HOME="$tmp/home/.codex" \
+    script -qfec "bash \"$DESKTOP_SCRIPT\" --skip-api-check --no-image-helper" /dev/null 2>&1)"; then
+    pass 'desktop setup accepts direct masked key paste over existing auth'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'desktop setup accepts direct masked key paste over existing auth'
+    rm -rf "$tmp"
+    return
+  fi
+
+  assert_contains "$auth" '"OPENAI_API_KEY": "direct-test-api-key"' 'desktop direct paste writes replacement API key'
+  if [[ "$output" == *'*******************'* ]]; then
+    pass 'desktop direct paste prints one mask star per key character'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'desktop direct paste prints one mask star per key character'
+  fi
+
+  rm -rf "$tmp"
+}
+
 test_desktop_api_check_reports_safe_details() {
   local tmp bin output status
   tmp="$(mktemp -d)"
@@ -578,8 +616,10 @@ test_desktop_powershell_static_checks() {
   assert_contains "$DESKTOP_PS" 'NEUROGATE_KEY_FROM_CLIPBOARD' 'PowerShell setup supports clipboard env flag'
   assert_contains "$DESKTOP_PS" 'Get-Clipboard' 'PowerShell setup reads clipboard when requested'
   assert_contains "$DESKTOP_PS" 'Read-MaskedInput "Paste NeuroGate API key"' 'PowerShell setup uses masked key input'
+  assert_contains "$DESKTOP_PS" 'Read-MaskedInput "Saved NeuroGate API key found. Enter=reuse, r=replace, or paste new key"' 'PowerShell setup masks existing-key choice prompt'
   assert_contains "$DESKTOP_PS" 'Write-Host -NoNewline "*"' 'PowerShell setup prints one mask star per key character'
   assert_contains "$DESKTOP_PS" '[ConsoleKey]::Backspace' 'PowerShell masked key input supports backspace'
+  assert_not_contains_file "$DESKTOP_PS" 'Read-Host -Prompt "Saved NeuroGate API key found' 'PowerShell setup does not use visible input for existing-key prompt'
   assert_contains "$DESKTOP_PS" 'Get-Command wsl.exe' 'PowerShell setup detects WSL'
   assert_contains "$DESKTOP_PS" 'Install-WslConfig $apiKey' 'PowerShell setup configures WSL after Windows'
   assert_contains "$DESKTOP_PS" '$wslScript | & $wsl.Source @wslArgs 2>&1' 'PowerShell setup sends WSL script through stdin'
@@ -865,6 +905,46 @@ JSON
   rm -rf "$tmp"
 }
 
+test_termux_setup_masks_direct_key_paste_over_existing_auth() {
+  local tmp auth output bin
+  if ! command -v script >/dev/null 2>&1; then
+    pass 'Termux direct key paste prompt check skipped without script command'
+    return
+  fi
+
+  tmp="$(mktemp -d)"
+  bin="$tmp/bin"
+  auth="$tmp/home/.codex/auth.json"
+  mkdir -p "$bin" "$(dirname "$auth")"
+  make_fake_curl "$bin"
+  cat > "$auth" <<'JSON'
+{
+  "auth_mode": "apikey",
+  "OPENAI_API_KEY": "old-test-api-key"
+}
+JSON
+
+  if output="$(printf 'direct-test-api-key\n' | HOME="$tmp/home" CODEX_HOME="$tmp/home/.codex" PATH="$bin:$PATH" \
+    script -qfec "bash \"$SCRIPT\" --model gpt-5" /dev/null 2>&1)"; then
+    pass 'Termux setup accepts direct masked key paste over existing auth'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'Termux setup accepts direct masked key paste over existing auth'
+    rm -rf "$tmp"
+    return
+  fi
+
+  assert_contains "$auth" '"OPENAI_API_KEY": "direct-test-api-key"' 'Termux direct paste writes replacement API key'
+  if [[ "$output" == *'*******************'* ]]; then
+    pass 'Termux direct paste prints one mask star per key character'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'Termux direct paste prints one mask star per key character'
+  fi
+
+  rm -rf "$tmp"
+}
+
 test_termux_api_check_reports_safe_details() {
   local tmp bin output status
   tmp="$(mktemp -d)"
@@ -931,6 +1011,7 @@ test_reuses_existing_auth_key_non_interactive
 test_desktop_setup_creates_config_and_image_helper
 test_desktop_setup_reuses_existing_auth_key
 test_desktop_setup_can_replace_existing_auth_key
+test_desktop_setup_masks_direct_key_paste_over_existing_auth
 test_desktop_api_check_reports_safe_details
 test_desktop_bootstrap_downloads_and_runs_setup
 test_desktop_powershell_static_checks
@@ -939,6 +1020,7 @@ test_pipe_safe_prompt_static_checks
 test_desktop_interactive_prompt_reads_from_tty
 test_requires_key_when_non_interactive
 test_termux_setup_can_replace_existing_auth_key
+test_termux_setup_masks_direct_key_paste_over_existing_auth
 test_termux_api_check_reports_safe_details
 test_bootstrap_downloads_and_runs_setup
 test_image_helper_static_checks

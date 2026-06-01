@@ -173,10 +173,15 @@ function Read-ApiKey {
     $existingKey = Read-ExistingApiKey
     if ($existingKey -and -not $replaceExisting) {
         if (-not $NonInteractive) {
-            $answer = Read-Host -Prompt "Saved NeuroGate API key found. Press Enter to reuse it, or type r to replace"
+            $answer = Read-MaskedInput "Saved NeuroGate API key found. Enter=reuse, r=replace, or paste new key"
+            $answer = $answer.Trim()
+            if (-not $answer) {
+                return $existingKey
+            }
             if ($answer -match '^(r|replace|new|n|н|з|заменить)$') {
                 return Read-NewApiKey
             }
+            return $answer
         }
         return $existingKey
     }

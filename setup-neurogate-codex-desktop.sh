@@ -247,14 +247,22 @@ read_api_key() {
   local existing_key replace_answer
   if existing_key="$(read_existing_api_key)" && ! is_truthy "$REPLACE_KEY"; then
     if [[ "$NON_INTERACTIVE" -eq 0 ]]; then
-      printf 'Saved NeuroGate API key found. Press Enter to reuse it, or type r to replace: '
-      read_line replace_answer
+      printf 'Saved NeuroGate API key found. Enter=reuse, r=replace, or paste new key (masked): '
+      read_secret replace_answer
+      printf '\n'
+      replace_answer="$(trim_key "$replace_answer")"
+      if [[ -z "$replace_answer" ]]; then
+        API_KEY="$existing_key"
+        return 0
+      fi
       case "$replace_answer" in
         r|R|replace|REPLACE|new|NEW|n|N|н|Н|з|З|заменить|ЗАМЕНИТЬ)
           prompt_new_api_key
           return 0
           ;;
       esac
+      API_KEY="$replace_answer"
+      return 0
     fi
     API_KEY="$existing_key"
     return 0
