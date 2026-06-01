@@ -84,6 +84,51 @@ make_fake_curl() {
   local bin_dir="$1"
   cat > "$bin_dir/curl" <<'FAKE_CURL'
 #!/usr/bin/env bash
+output_path=''
+write_out=''
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -o)
+      output_path="$2"
+      shift 2
+      ;;
+    -w)
+      write_out="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+body='{
+  "object": "list",
+  "data": [
+    { "id": "gpt-5.5" },
+    { "id": "gpt-5" },
+    { "id": "gpt-4.1" }
+  ]
+}'
+
+if [[ -n "$output_path" ]]; then
+  printf '%s\n' "$body" > "$output_path"
+else
+  printf '%s\n' "$body"
+fi
+
+if [[ -n "$write_out" ]]; then
+  printf '200'
+fi
+FAKE_CURL
+  chmod +x "$bin_dir/curl"
+}
+
+make_fake_legacy_curl() {
+  local bin_dir="$1"
+  cat > "$bin_dir/curl" <<'FAKE_LEGACY_CURL'
+#!/usr/bin/env bash
 cat <<'JSON'
 {
   "object": "list",
@@ -94,7 +139,7 @@ cat <<'JSON'
   ]
 }
 JSON
-FAKE_CURL
+FAKE_LEGACY_CURL
   chmod +x "$bin_dir/curl"
 }
 
@@ -138,11 +183,73 @@ make_fake_desktop_curl() {
   cat > "$bin_dir/curl" <<'FAKE_DESKTOP_CURL'
 #!/usr/bin/env bash
 output_path=''
+write_out=''
+url=''
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -o)
       output_path="$2"
+      shift 2
+      ;;
+    -w)
+      write_out="$2"
+      shift 2
+      ;;
+    *)
+      if [[ "$1" == http://* || "$1" == https://* ]]; then
+        url="$1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ -n "$output_path" && "$url" == *'responses_image.py' ]]; then
+  cat > "$output_path" <<'PY'
+#!/usr/bin/env python3
+print("responses-image helper")
+PY
+  exit 0
+fi
+
+body='{
+  "object": "list",
+  "data": [
+    { "id": "gpt-5.5" },
+    { "id": "gpt-5" },
+    { "id": "gpt-4.1" }
+  ]
+}'
+
+if [[ -n "$output_path" ]]; then
+  printf '%s\n' "$body" > "$output_path"
+else
+  printf '%s\n' "$body"
+fi
+
+if [[ -n "$write_out" ]]; then
+  printf '200'
+fi
+FAKE_DESKTOP_CURL
+  chmod +x "$bin_dir/curl"
+}
+
+make_fake_api_error_curl() {
+  local bin_dir="$1"
+  cat > "$bin_dir/curl" <<'FAKE_API_ERROR_CURL'
+#!/usr/bin/env bash
+output_path=''
+write_out=''
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -o)
+      output_path="$2"
+      shift 2
+      ;;
+    -w)
+      write_out="$2"
       shift 2
       ;;
     *)
@@ -151,25 +258,20 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+bearer_token='abcdefgh'"ijklmnop"
+sk_token='sk-abcdefgh'"ijkl"
+body="{\"error\":{\"message\":\"bad key Bearer $bearer_token $sk_token\",\"type\":\"authentication_error\",\"code\":\"unauthorized\"}}"
+
 if [[ -n "$output_path" ]]; then
-  cat > "$output_path" <<'PY'
-#!/usr/bin/env python3
-print("responses-image helper")
-PY
-  exit 0
+  printf '%s' "$body" > "$output_path"
+else
+  printf '%s' "$body"
 fi
 
-cat <<'JSON'
-{
-  "object": "list",
-  "data": [
-    { "id": "gpt-5.5" },
-    { "id": "gpt-5" },
-    { "id": "gpt-4.1" }
-  ]
-}
-JSON
-FAKE_DESKTOP_CURL
+if [[ -n "$write_out" ]]; then
+  printf '401'
+fi
+FAKE_API_ERROR_CURL
   chmod +x "$bin_dir/curl"
 }
 
@@ -367,6 +469,79 @@ JSON
   rm -rf "$tmp"
 }
 
+test_desktop_setup_can_replace_existing_auth_key() {
+  local tmp auth output
+  if ! command -v script >/dev/null 2>&1; then
+    pass 'desktop replace key prompt check skipped without script command'
+    return
+  fi
+
+  tmp="$(mktemp -d)"
+  auth="$tmp/home/.codex/auth.json"
+  mkdir -p "$(dirname "$auth")"
+  cat > "$auth" <<'JSON'
+{
+  "auth_mode": "apikey",
+  "OPENAI_API_KEY": "old-test-api-key"
+}
+JSON
+
+  if output="$(printf 'r\nnew-test-api-key\n' | HOME="$tmp/home" CODEX_HOME="$tmp/home/.codex" \
+    script -qfec "bash \"$DESKTOP_SCRIPT\" --skip-api-check --no-image-helper" /dev/null 2>&1)"; then
+    pass 'desktop setup can replace existing auth.json key'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'desktop setup can replace existing auth.json key'
+    rm -rf "$tmp"
+    return
+  fi
+
+  assert_contains "$auth" '"OPENAI_API_KEY": "new-test-api-key"' 'desktop setup writes replacement API key'
+  if [[ "$output" == *'****************'* ]]; then
+    pass 'desktop replacement prompt prints one mask star per new key character'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'desktop replacement prompt prints one mask star per new key character'
+  fi
+
+  rm -rf "$tmp"
+}
+
+test_desktop_api_check_reports_safe_details() {
+  local tmp bin output status
+  tmp="$(mktemp -d)"
+  bin="$tmp/bin"
+  mkdir -p "$bin"
+  make_fake_api_error_curl "$bin"
+
+  set +e
+  output="$(NEUROGATE_API_KEY='test-api-key' HOME="$tmp/home" PATH="$bin:$PATH" \
+    bash "$DESKTOP_SCRIPT" --non-interactive --no-image-helper 2>&1)"
+  status="$?"
+  set -e
+
+  if [[ "$status" != '0' ]]; then
+    pass 'desktop setup fails when API check returns 401'
+  else
+    fail 'desktop setup fails when API check returns 401'
+  fi
+
+  assert_file "$tmp/home/.codex/config.toml" 'desktop setup writes config before failed API check'
+  assert_file "$tmp/home/.codex/auth.json" 'desktop setup writes auth before failed API check'
+
+  if [[ "$output" == *'HTTP 401'* && "$output" == *'Settings were written'* ]]; then
+    pass 'desktop setup reports safe API check details'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'desktop setup reports safe API check details'
+  fi
+  assert_not_contains_text "$output" 'test-api-key' 'desktop API check error does not print API key'
+  assert_not_contains_text "$output" 'Bearer abcdefgh' 'desktop API check error redacts bearer token'
+  assert_not_contains_text "$output" 'sk-abcdefgh' 'desktop API check error redacts sk token'
+
+  rm -rf "$tmp"
+}
+
 test_desktop_bootstrap_downloads_and_runs_setup() {
   local tmp bin output
   tmp="$(mktemp -d)"
@@ -397,10 +572,20 @@ test_desktop_powershell_static_checks() {
   assert_contains "$DESKTOP_PS" 'responses_image.py' 'PowerShell setup installs image helper script'
   assert_contains "$DESKTOP_PS" '[switch]$NoWsl' 'PowerShell setup can skip WSL setup'
   assert_contains "$DESKTOP_PS" '[string]$WslDistro' 'PowerShell setup can target a WSL distro'
+  assert_contains "$DESKTOP_PS" '[switch]$ReplaceKey' 'PowerShell setup can replace an existing key'
+  assert_contains "$DESKTOP_PS" '[switch]$KeyFromClipboard' 'PowerShell setup can read key from clipboard'
+  assert_contains "$DESKTOP_PS" 'NEUROGATE_KEY_FROM_CLIPBOARD' 'PowerShell setup supports clipboard env flag'
+  assert_contains "$DESKTOP_PS" 'Get-Clipboard' 'PowerShell setup reads clipboard when requested'
+  assert_contains "$DESKTOP_PS" 'Read-MaskedInput "Paste NeuroGate API key"' 'PowerShell setup uses masked key input'
+  assert_contains "$DESKTOP_PS" 'Write-Host -NoNewline "*"' 'PowerShell setup prints one mask star per key character'
+  assert_contains "$DESKTOP_PS" '[ConsoleKey]::Backspace' 'PowerShell masked key input supports backspace'
   assert_contains "$DESKTOP_PS" 'Get-Command wsl.exe' 'PowerShell setup detects WSL'
   assert_contains "$DESKTOP_PS" 'Install-WslConfig $apiKey' 'PowerShell setup configures WSL after Windows'
   assert_contains "$DESKTOP_PS" '$wslScript | & $wsl.Source @wslArgs 2>&1' 'PowerShell setup sends WSL script through stdin'
   assert_not_contains_file "$DESKTOP_PS" '@("--", "bash", "-s", $ApiKey)' 'PowerShell setup does not pass API key as WSL argument'
+  assert_contains "$DESKTOP_PS" 'Format-ApiCheckError $_ $ApiKey' 'PowerShell setup reports API check details'
+  assert_contains "$DESKTOP_PS" 'Settings were written, but the API check failed' 'PowerShell setup explains files stay written after API check failure'
+  assert_contains "$DESKTOP_PS" 'Bearer [redacted]' 'PowerShell setup redacts bearer tokens in errors'
   assert_contains "$DESKTOP_BOOTSTRAP_PS" 'setup-neurogate-codex-desktop.ps1' 'PowerShell bootstrap points to desktop setup'
 
   if command -v pwsh >/dev/null 2>&1; then
@@ -467,6 +652,12 @@ test_desktop_powershell_wsl_embedded_script() {
   fi
   assert_contains "$tmp/home/.codex/config.toml" 'base_url = "https://api.neurogate.space/v1"' 'PowerShell WSL script writes NeuroGate base URL'
   assert_contains "$tmp/home/.codex/auth.json" '"OPENAI_API_KEY": "test-api-key"' 'PowerShell WSL script writes API key'
+  if [[ "$output" == *"codex_dir=$tmp/home/.codex"* && "$output" == *"home=$tmp/home"* && "$output" == *'user='* ]]; then
+    pass 'PowerShell WSL script reports user home and config dir'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'PowerShell WSL script reports user home and config dir'
+  fi
   assert_not_contains_text "$output" 'test-api-key' 'PowerShell WSL script does not print API key'
 
   rm -rf "$tmp"
@@ -499,6 +690,12 @@ test_desktop_interactive_prompt_reads_from_tty() {
   fi
 
   assert_contains "$tmp/codex/auth.json" '"OPENAI_API_KEY": "tty-test-key"' 'desktop tty prompt writes API key'
+  if [[ "$output" == *'************'* ]]; then
+    pass 'desktop tty prompt prints one mask star per key character'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'desktop tty prompt prints one mask star per key character'
+  fi
   rm -rf "$tmp"
 }
 
@@ -619,6 +816,81 @@ test_requires_key_when_non_interactive() {
   rm -rf "$tmp"
 }
 
+test_termux_setup_can_replace_existing_auth_key() {
+  local tmp auth output bin
+  if ! command -v script >/dev/null 2>&1; then
+    pass 'Termux replace key prompt check skipped without script command'
+    return
+  fi
+
+  tmp="$(mktemp -d)"
+  bin="$tmp/bin"
+  auth="$tmp/home/.codex/auth.json"
+  mkdir -p "$bin" "$(dirname "$auth")"
+  make_fake_curl "$bin"
+  cat > "$auth" <<'JSON'
+{
+  "auth_mode": "apikey",
+  "OPENAI_API_KEY": "old-test-api-key"
+}
+JSON
+
+  if output="$(printf 'new-test-api-key\n' | HOME="$tmp/home" CODEX_HOME="$tmp/home/.codex" PATH="$bin:$PATH" \
+    script -qfec "bash \"$SCRIPT\" --model gpt-5 --replace-key" /dev/null 2>&1)"; then
+    pass 'Termux setup can replace existing auth.json key'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'Termux setup can replace existing auth.json key'
+    rm -rf "$tmp"
+    return
+  fi
+
+  assert_contains "$auth" '"OPENAI_API_KEY": "new-test-api-key"' 'Termux setup writes replacement API key'
+  if [[ "$output" == *'****************'* ]]; then
+    pass 'Termux replacement prompt prints one mask star per new key character'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'Termux replacement prompt prints one mask star per new key character'
+  fi
+
+  rm -rf "$tmp"
+}
+
+test_termux_api_check_reports_safe_details() {
+  local tmp bin output status
+  tmp="$(mktemp -d)"
+  bin="$tmp/bin"
+  mkdir -p "$bin"
+  make_fake_api_error_curl "$bin"
+
+  set +e
+  output="$(NEUROGATE_API_KEY='test-api-key' HOME="$tmp/home" PATH="$bin:$PATH" \
+    bash "$SCRIPT" --non-interactive 2>&1)"
+  status="$?"
+  set -e
+
+  if [[ "$status" != '0' ]]; then
+    pass 'Termux setup fails when API check returns 401'
+  else
+    fail 'Termux setup fails when API check returns 401'
+  fi
+
+  assert_file "$tmp/home/.codex/config.toml" 'Termux setup writes config before failed API check'
+  assert_file "$tmp/home/.codex/auth.json" 'Termux setup writes auth before failed API check'
+
+  if [[ "$output" == *'HTTP 401'* && "$output" == *'Настройки записаны'* ]]; then
+    pass 'Termux setup reports safe API check details'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'Termux setup reports safe API check details'
+  fi
+  assert_not_contains_text "$output" 'test-api-key' 'Termux API check error does not print API key'
+  assert_not_contains_text "$output" 'Bearer abcdefgh' 'Termux API check error redacts bearer token'
+  assert_not_contains_text "$output" 'sk-abcdefgh' 'Termux API check error redacts sk token'
+
+  rm -rf "$tmp"
+}
+
 test_bootstrap_downloads_and_runs_setup() {
   local tmp bin output
   tmp="$(mktemp -d)"
@@ -649,12 +921,16 @@ test_repairs_config_idempotently
 test_reuses_existing_auth_key_non_interactive
 test_desktop_setup_creates_config_and_image_helper
 test_desktop_setup_reuses_existing_auth_key
+test_desktop_setup_can_replace_existing_auth_key
+test_desktop_api_check_reports_safe_details
 test_desktop_bootstrap_downloads_and_runs_setup
 test_desktop_powershell_static_checks
 test_desktop_powershell_wsl_embedded_script
 test_pipe_safe_prompt_static_checks
 test_desktop_interactive_prompt_reads_from_tty
 test_requires_key_when_non_interactive
+test_termux_setup_can_replace_existing_auth_key
+test_termux_api_check_reports_safe_details
 test_bootstrap_downloads_and_runs_setup
 test_image_helper_static_checks
 test_image_helper_reads_selected_codex_provider

@@ -10,6 +10,7 @@ IMAGE_HELPER_URL="${NEUROGATE_IMAGE_HELPER_URL:-https://raw.githubusercontent.co
 NON_INTERACTIVE=0
 SKIP_API_CHECK=0
 INSTALL_IMAGE_HELPER=1
+REPLACE_KEY="${NEUROGATE_REPLACE_KEY:-0}"
 MODEL="$DEFAULT_MODEL"
 API_KEY="${NEUROGATE_API_KEY:-${OPENAI_API_KEY:-}}"
 IMAGE_HELPER_PATH="${NEUROGATE_IMAGE_HELPER_PATH:-$HOME/.local/bin/responses-image}"
@@ -26,6 +27,7 @@ Options:
   --model MODEL           Codex model to write to config.toml. Default: gpt-5.5.
   --skip-api-check        Write files without calling /v1/models.
   --no-image-helper       Do not install the responses-image helper command.
+  --replace-key           Ask for a new key instead of reusing auth.json.
   --image-helper-path P   Where to install responses-image. Default: ~/.local/bin/responses-image.
   -h, --help              Show this help.
 
@@ -33,6 +35,7 @@ Environment:
   NEUROGATE_API_KEY       Preferred way to pass the key in non-interactive mode.
   OPENAI_API_KEY          Fallback key variable for OpenAI-compatible tooling.
                            If neither is set, an existing auth.json key is reused.
+  NEUROGATE_REPLACE_KEY   Set to 1 to replace an existing auth.json key.
   CODEX_HOME              Optional Codex Desktop config directory. Default: ~/.codex.
 USAGE
 }
@@ -67,6 +70,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-image-helper)
       INSTALL_IMAGE_HELPER=0
+      shift
+      ;;
+    --replace-key)
+      REPLACE_KEY=1
       shift
       ;;
     --image-helper-path)
@@ -116,13 +123,63 @@ trim_key() {
   printf '%s' "$value"
 }
 
-read_secret() {
+is_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|y|Y|on|ON|да|ДА|д|Д)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+read_line() {
   local __var="$1"
   if [[ -r /dev/tty ]]; then
-    IFS= read -rs "$__var" </dev/tty
+    IFS= read -r "$__var" </dev/tty
   else
-    IFS= read -rs "$__var"
+    IFS= read -r "$__var"
   fi
+}
+
+read_secret() {
+  local __var="$1"
+  local input='' char='' input_path output_path old_stty=''
+  input_path='/dev/stdin'
+  output_path='/dev/stderr'
+  if [[ -r /dev/tty ]]; then
+    input_path='/dev/tty'
+  fi
+  if [[ -w /dev/tty ]]; then
+    output_path='/dev/tty'
+  fi
+
+  if [[ "$input_path" == '/dev/tty' ]]; then
+    old_stty="$(stty -g < /dev/tty 2>/dev/null || true)"
+    stty -echo < /dev/tty 2>/dev/null || true
+  fi
+
+  while IFS= read -r -s -n 1 char < "$input_path"; do
+    if [[ -z "$char" || "$char" == $'\r' || "$char" == $'\n' ]]; then
+      break
+    fi
+    if [[ "$char" == $'\177' || "$char" == $'\b' ]]; then
+      if [[ -n "$input" ]]; then
+        input="${input%?}"
+        printf '\b \b' > "$output_path"
+      fi
+      continue
+    fi
+    input+="$char"
+    printf '*' > "$output_path"
+  done
+
+  if [[ -n "$old_stty" ]]; then
+    stty "$old_stty" < /dev/tty 2>/dev/null || true
+  fi
+
+  printf -v "$__var" '%s' "$input"
 }
 
 read_existing_api_key() {
@@ -172,26 +229,45 @@ try {
   printf '%s' "$existing_key"
 }
 
+prompt_new_api_key() {
+  printf 'Paste NeuroGate API key (one * per character): '
+  read_secret API_KEY
+  printf '\n'
+  API_KEY="$(trim_key "$API_KEY")"
+
+  [[ -n "$API_KEY" ]] || die 'API key not found'
+}
+
 read_api_key() {
   API_KEY="$(trim_key "$API_KEY")"
   if [[ -n "$API_KEY" ]]; then
     return 0
   fi
 
-  if API_KEY="$(read_existing_api_key)"; then
+  local existing_key replace_answer
+  if existing_key="$(read_existing_api_key)" && ! is_truthy "$REPLACE_KEY"; then
+    if [[ "$NON_INTERACTIVE" -eq 0 ]]; then
+      printf 'Saved NeuroGate API key found. Press Enter to reuse it, or type r to replace: '
+      read_line replace_answer
+      case "$replace_answer" in
+        r|R|replace|REPLACE|new|NEW|n|N|н|Н|з|З|заменить|ЗАМЕНИТЬ)
+          prompt_new_api_key
+          return 0
+          ;;
+      esac
+    fi
+    API_KEY="$existing_key"
     return 0
   fi
 
   if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
+    if is_truthy "$REPLACE_KEY"; then
+      die 'API key replacement requested. Set NEUROGATE_API_KEY or run interactively'
+    fi
     die 'API key not found. Set NEUROGATE_API_KEY or run interactively once'
   fi
 
-  printf 'Paste NeuroGate API key (hidden input): '
-  read_secret API_KEY
-  printf '\n'
-  API_KEY="$(trim_key "$API_KEY")"
-
-  [[ -n "$API_KEY" ]] || die 'API key not found'
+  prompt_new_api_key
 }
 
 backup_file() {
@@ -333,12 +409,58 @@ process.stdin.on("end", () => {
   sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<< "$json"
 }
 
+sanitize_api_error() {
+  local text="$1"
+  if [[ -n "${API_KEY:-}" ]]; then
+  text="${text//"$API_KEY"/[redacted]}"
+  fi
+  text="$(sed -E \
+    -e 's/[Bb][Ee][Aa][Rr][Ee][Rr][[:space:]]+[A-Za-z0-9._~+\/=-]+/Bearer [redacted]/g' \
+    -e 's/sk-[A-Za-z0-9_*.-]{8,}/sk-[redacted]/g' <<< "$text")"
+  printf '%s' "$text"
+}
+
+trim_error_details() {
+  local text="$1"
+  text="$(sanitize_api_error "$text")"
+  if [[ "${#text}" -gt 500 ]]; then
+    text="${text:0:500}..."
+  fi
+  printf '%s' "$text"
+}
+
 check_models() {
-  local response models
-  if ! response="$(curl -fsS --connect-timeout 20 --max-time 60 \
+  local response models status curl_status response_file error_file error_text
+  response_file="$(mktemp)"
+  error_file="$(mktemp)"
+
+  set +e
+  status="$(curl -sS --connect-timeout 20 --max-time 60 \
+    -o "$response_file" \
+    -w '%{http_code}' \
     "$BASE_URL/models" \
-    -H "Authorization: Bearer $API_KEY")"; then
-    die 'failed to check /v1/models. Check the key, internet connection, and NeuroGate API availability'
+    -H "Authorization: Bearer $API_KEY" 2>"$error_file")"
+  curl_status="$?"
+  set -e
+
+  response="$(cat "$response_file")"
+  error_text="$(cat "$error_file")"
+  rm -f "$response_file" "$error_file"
+
+  if [[ "$curl_status" -ne 0 ]]; then
+    error_text="$(trim_error_details "$error_text")"
+    if [[ -n "$error_text" ]]; then
+      die "failed to check /v1/models. Settings were written, but the API check failed. Details: $error_text"
+    fi
+    die "failed to check /v1/models. Settings were written, but the API check failed. curl exit code: $curl_status"
+  fi
+
+  if [[ ! "$status" =~ ^2 ]]; then
+    response="$(trim_error_details "$response")"
+    if [[ -n "$response" ]]; then
+      die "failed to check /v1/models. Settings were written, but the API check failed. Details: HTTP $status | $response"
+    fi
+    die "failed to check /v1/models. Settings were written, but the API check failed. Details: HTTP $status"
   fi
 
   models="$(extract_models "$response" | awk 'NF && !seen[$0]++')"

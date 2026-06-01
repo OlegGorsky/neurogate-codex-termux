@@ -38,8 +38,8 @@ curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash
 ## Что будет по шагам
 
 1. Скрипт найдёт Codex config directory.
-2. Если ключа ещё нет, попросит вставить NeuroGate API key скрытым вводом.
-3. Если `auth.json` уже есть, ключ повторно вводить не нужно.
+2. Если ключа ещё нет, попросит вставить NeuroGate API key маскированным вводом: одна `*` на каждый символ.
+3. Если `auth.json` уже есть, скрипт предложит оставить сохранённый ключ или заменить его.
 4. Скрипт обновит `config.toml` на NeuroGate provider.
 5. Скрипт проверит ключ через `GET https://api.neurogate.space/v1/models`.
 6. Для Codex Desktop дополнительно поставит helper для генерации картинок.
@@ -78,11 +78,21 @@ wire_api = "responses"
 - Windows: `%USERPROFILE%\.codex\config.toml` и `%USERPROFILE%\.codex\auth.json`
 - WSL при запуске Windows-скрипта: `~/.codex/config.toml` и `~/.codex/auth.json` внутри default WSL-дистрибутива
 
+Для WSL используется текущий default user выбранного дистрибутива. Если default user в WSL — `oleg`, путь будет вроде `/home/oleg/.codex`; если default user — `root`, путь будет `/root/.codex`. Скрипт выводит WSL user, `HOME` и итоговый config dir в лог.
+
 Перед изменением существующих файлов создаются `.bak-YYYYmmdd-HHMMSS` бэкапы.
+
+Если скрипт успел записать файлы, но упал на проверке `/v1/models`, настройки уже сохранены. Чаще всего причина в ключе или сетевом доступе до NeuroGate. Повторить запись без контрольного запроса можно опцией `-SkipApiCheck` на Windows или `--skip-api-check` на Linux/macOS/Termux.
+
+При вставке в prompt ключ не показывается, но по количеству `*` видно, сколько символов считалось. Если в Windows вставка всё равно работает криво, скопируй ключ в буфер обмена и запусти:
+
+```powershell
+$env:NEUROGATE_KEY_FROM_CLIPBOARD='1'; irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex; Remove-Item Env:\NEUROGATE_KEY_FROM_CLIPBOARD
+```
 
 ## Обновление
 
-Запусти ту же команду, что и при установке. Если ключ уже сохранён, скрипт не спросит его заново.
+Запусти ту же команду, что и при установке. Если ключ уже сохранён, скрипт спросит, оставить его или заменить. Для обычного обновления нажми Enter.
 
 Desktop Ubuntu/Linux/macOS:
 
@@ -151,6 +161,8 @@ Desktop Windows:
 powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1
 powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -WslDistro Ubuntu
 powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -NoWsl
+powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -ReplaceKey
+powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -KeyFromClipboard
 ```
 
 Termux:
@@ -171,6 +183,13 @@ NEUROGATE_API_KEY='...' bash setup-neurogate-codex-termux.sh --non-interactive
 ```bash
 NEUROGATE_API_KEY='...' bash setup-neurogate-codex-desktop.sh --non-interactive --model gpt-5
 NEUROGATE_API_KEY='...' bash setup-neurogate-codex-termux.sh --non-interactive --model gpt-5
+```
+
+Заменить сохранённый ключ:
+
+```bash
+bash setup-neurogate-codex-desktop.sh --replace-key
+bash setup-neurogate-codex-termux.sh --replace-key
 ```
 
 Документация по Desktop: [docs/codex-desktop.md](docs/codex-desktop.md).

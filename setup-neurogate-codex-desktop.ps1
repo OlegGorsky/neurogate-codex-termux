@@ -4,6 +4,8 @@ param(
     [switch]$SkipApiCheck,
     [switch]$NoImageHelper,
     [switch]$NoWsl,
+    [switch]$ReplaceKey,
+    [switch]$KeyFromClipboard,
     [string]$WslDistro,
     [string]$ImageHelperPath
 )
@@ -60,6 +62,86 @@ function To-Base64([string]$Text) {
     return [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($Text))
 }
 
+function Test-EnvFlag([string]$Value) {
+    if (-not $Value) {
+        return $false
+    }
+    return $Value -match '^(1|true|yes|y|on|да|д)$'
+}
+
+function Read-ClipboardApiKey {
+    try {
+        $value = (Get-Clipboard -ErrorAction Stop) -join [Environment]::NewLine
+    } catch {
+        Die "Could not read API key from clipboard."
+    }
+
+    if (-not $value -or -not $value.Trim()) {
+        Die "Clipboard does not contain an API key."
+    }
+
+    return $value.Trim()
+}
+
+function Read-SecureStringPlain([string]$Prompt) {
+    $secure = Read-Host -Prompt $Prompt -AsSecureString
+    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+    }
+}
+
+function Read-MaskedInput([string]$Prompt) {
+    if ([Console]::IsInputRedirected) {
+        return Read-SecureStringPlain $Prompt
+    }
+
+    Write-Host -NoNewline "${Prompt}: "
+    $builder = New-Object System.Text.StringBuilder
+    try {
+        while ($true) {
+            $key = [Console]::ReadKey($true)
+            if ($key.Key -eq [ConsoleKey]::Enter) {
+                Write-Host ""
+                break
+            }
+            if ($key.Key -eq [ConsoleKey]::Backspace) {
+                if ($builder.Length -gt 0) {
+                    [void]$builder.Remove($builder.Length - 1, 1)
+                    Write-Host -NoNewline "`b `b"
+                }
+                continue
+            }
+            if ([char]::IsControl($key.KeyChar)) {
+                continue
+            }
+
+            [void]$builder.Append($key.KeyChar)
+            Write-Host -NoNewline "*"
+        }
+    } catch {
+        Write-Host ""
+        return Read-SecureStringPlain $Prompt
+    }
+
+    return $builder.ToString()
+}
+
+function Read-NewApiKey {
+    if ($KeyFromClipboard -or (Test-EnvFlag $env:NEUROGATE_KEY_FROM_CLIPBOARD)) {
+        Log "Reading NeuroGate API key from clipboard"
+        return Read-ClipboardApiKey
+    }
+
+    $plain = Read-MaskedInput "Paste NeuroGate API key"
+    if (-not $plain -or -not $plain.Trim()) {
+        Die "API key not found."
+    }
+    return $plain.Trim()
+}
+
 function Read-ExistingApiKey {
     if (-not (Test-Path -LiteralPath $AuthFile)) {
         return $null
@@ -87,27 +169,26 @@ function Read-ApiKey {
         return $apiKey.Trim()
     }
 
+    $replaceExisting = $ReplaceKey -or (Test-EnvFlag $env:NEUROGATE_REPLACE_KEY)
     $existingKey = Read-ExistingApiKey
-    if ($existingKey) {
+    if ($existingKey -and -not $replaceExisting) {
+        if (-not $NonInteractive) {
+            $answer = Read-Host -Prompt "Saved NeuroGate API key found. Press Enter to reuse it, or type r to replace"
+            if ($answer -match '^(r|replace|new|n|н|з|заменить)$') {
+                return Read-NewApiKey
+            }
+        }
         return $existingKey
     }
 
     if ($NonInteractive) {
+        if ($replaceExisting) {
+            Die "API key replacement requested. Set NEUROGATE_API_KEY or run interactively."
+        }
         Die "API key not found. Set NEUROGATE_API_KEY or run interactively once."
     }
 
-    $secure = Read-Host -Prompt "Paste NeuroGate API key" -AsSecureString
-    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-    try {
-        $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
-    } finally {
-        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
-    }
-
-    if (-not $plain -or -not $plain.Trim()) {
-        Die "API key not found."
-    }
-    return $plain.Trim()
+    return Read-NewApiKey
 }
 
 function Backup-File([string]$Path) {
@@ -230,11 +311,89 @@ function Build-AuthBody([string]$ApiKey) {
     return "{`n  `"auth_mode`": `"apikey`",`n  `"OPENAI_API_KEY`": `"$escapedKey`"`n}`n"
 }
 
+function Sanitize-Secret([string]$Text, [string]$ApiKey) {
+    if (-not $Text) {
+        return ""
+    }
+
+    $clean = $Text
+    if ($ApiKey) {
+        $clean = [regex]::Replace($clean, [regex]::Escape($ApiKey), "[redacted]")
+    }
+    $clean = [regex]::Replace($clean, "Bearer\s+[A-Za-z0-9._~+/=-]+", "Bearer [redacted]", "IgnoreCase")
+    $clean = [regex]::Replace($clean, "sk-[A-Za-z0-9_*.-]{8,}", "sk-[redacted]")
+    return $clean
+}
+
+function Read-ErrorResponseBody($Response) {
+    if (-not $Response) {
+        return ""
+    }
+
+    try {
+        $stream = $Response.GetResponseStream()
+        if (-not $stream) {
+            return ""
+        }
+        $reader = New-Object System.IO.StreamReader($stream)
+        try {
+            return $reader.ReadToEnd()
+        } finally {
+            $reader.Dispose()
+        }
+    } catch {
+        return ""
+    }
+}
+
+function Format-ApiCheckError($ErrorRecord, [string]$ApiKey) {
+    $details = New-Object System.Collections.Generic.List[string]
+    $response = $ErrorRecord.Exception.Response
+
+    if ($response) {
+        try {
+            $status = [int]$response.StatusCode
+            $statusDescription = [string]$response.StatusDescription
+            if ($statusDescription) {
+                $details.Add("HTTP $status $statusDescription")
+            } else {
+                $details.Add("HTTP $status")
+            }
+        } catch {
+        }
+    }
+
+    $body = ""
+    if ($ErrorRecord.ErrorDetails -and $ErrorRecord.ErrorDetails.Message) {
+        $body = [string]$ErrorRecord.ErrorDetails.Message
+    }
+    if (-not $body) {
+        $body = Read-ErrorResponseBody $response
+    }
+    if ($body) {
+        $body = Sanitize-Secret $body $ApiKey
+        if ($body.Length -gt 500) {
+            $body = $body.Substring(0, 500) + "..."
+        }
+        $details.Add($body)
+    }
+
+    if (-not $details.Count) {
+        $message = Sanitize-Secret $ErrorRecord.Exception.Message $ApiKey
+        if ($message) {
+            $details.Add($message)
+        }
+    }
+
+    $suffix = if ($details.Count) { " Details: $($details -join ' | ')" } else { "" }
+    return "Failed to check /v1/models. Settings were written, but the API check failed.$suffix"
+}
+
 function Check-Models([string]$ApiKey) {
     try {
         $response = Invoke-RestMethod -Method Get -Uri "$BaseUrl/models" -Headers @{ Authorization = "Bearer $ApiKey" } -TimeoutSec 60
     } catch {
-        Die "Failed to check /v1/models. Check the key, internet connection, and NeuroGate API availability."
+        Die (Format-ApiCheckError $_ $ApiKey)
     }
 
     $models = @()
@@ -436,7 +595,9 @@ if [[ -n "$helper_body_b64" ]]; then
   chmod +x "$HOME/.local/bin/responses-image"
 fi
 
-printf '%s\n' "$HOME/.codex"
+printf 'codex_dir=%s\n' "$HOME/.codex"
+printf 'user=%s\n' "$(id -un 2>/dev/null || whoami)"
+printf 'home=%s\n' "$HOME"
 '@
 
     $wslScript = $wslScript.Replace('__PROVIDER_B64__', $providerB64)
@@ -449,11 +610,30 @@ printf '%s\n' "$HOME/.codex"
     $wslArgs = @(Get-WslBaseArgs) + @("--", "bash", "-s")
     $output = $wslScript | & $wsl.Source @wslArgs 2>&1
     if ($LASTEXITCODE -eq 0) {
-        $target = ($output | Select-Object -Last 1)
+        $target = ""
+        $wslUser = ""
+        $wslHome = ""
+        foreach ($line in $output) {
+            if ($line -match '^codex_dir=(.*)$') {
+                $target = $Matches[1]
+            } elseif ($line -match '^user=(.*)$') {
+                $wslUser = $Matches[1]
+            } elseif ($line -match '^home=(.*)$') {
+                $wslHome = $Matches[1]
+            }
+        }
+        if (-not $target) {
+            $target = ($output | Select-Object -Last 1)
+        }
+
+        $userLabel = if ($wslUser) { ", user $wslUser" } else { "" }
         if ($WslDistro) {
-            Log "WSL Codex config dir ($WslDistro): $target"
+            Log "WSL Codex config dir ($WslDistro$userLabel): $target"
         } else {
-            Log "WSL Codex config dir: $target"
+            Log "WSL Codex config dir$userLabel: $target"
+        }
+        if ($wslHome) {
+            Log "WSL HOME: $wslHome"
         }
         if ($helperB64) {
             Log "WSL image helper: ~/.local/bin/responses-image"

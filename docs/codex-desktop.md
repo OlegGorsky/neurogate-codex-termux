@@ -6,7 +6,7 @@
 - `%USERPROFILE%\.codex\config.toml` на Windows
 - `auth.json` рядом с `config.toml`
 
-Если `auth.json` уже есть, ключ повторно вводить не нужно. Скрипт обновит provider и переиспользует существующий ключ.
+Если `auth.json` уже есть, скрипт предложит оставить сохранённый ключ или заменить его. Для обычного обновления достаточно нажать Enter. При вводе нового ключа показывается одна `*` на каждый считанный символ.
 
 ## Ubuntu/Linux
 
@@ -47,6 +47,12 @@ irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex
 
 Для работы helper-команды генерации изображений нужен Python в `PATH`.
 
+Если парольный prompt плохо принимает вставку, скопируй ключ в буфер обмена и запусти:
+
+```powershell
+$env:NEUROGATE_KEY_FROM_CLIPBOARD='1'; irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex; Remove-Item Env:\NEUROGATE_KEY_FROM_CLIPBOARD
+```
+
 ## Что меняется
 
 В `config.toml` выставляется NeuroGate provider:
@@ -72,6 +78,8 @@ wire_api = "responses"
 ```
 
 После обновления перезапусти Codex Desktop, чтобы приложение перечитало provider config.
+
+Если после записи файлов падает только проверка `/v1/models`, настройки уже сохранены. Обычно это означает, что API-ключ не принят сервером или сеть не даёт сделать контрольный запрос. Для повторной записи без проверки можно запустить скрипт с `-SkipApiCheck`, но для реальной работы Codex ключ всё равно должен проходить авторизацию.
 
 ## Картинки
 
@@ -149,6 +157,8 @@ powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -Sk
 powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -NoImageHelper
 powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -WslDistro Ubuntu
 powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -NoWsl
+powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -ReplaceKey
+powershell -ExecutionPolicy Bypass -File .\setup-neurogate-codex-desktop.ps1 -KeyFromClipboard
 ```
 
-`-WslDistro Ubuntu` полезен, если default distro не тот. `-NoWsl` оставляет только Windows-настройку.
+`-WslDistro Ubuntu` полезен, если default distro не тот. `-NoWsl` оставляет только Windows-настройку. `-ReplaceKey` принудительно просит новый ключ. `-KeyFromClipboard` берёт новый ключ из буфера обмена.
