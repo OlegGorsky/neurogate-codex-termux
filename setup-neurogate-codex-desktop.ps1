@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$NonInteractive,
     [string]$Model = "gpt-5.5",
     [switch]$SkipApiCheck,
@@ -648,9 +648,9 @@ printf 'home=%s\n' "$HOME"
 
         $userLabel = if ($wslUser) { ", user $wslUser" } else { "" }
         if ($WslDistro) {
-            Log ("Папка Codex в WSL ({0}{1}): {2}" -f $WslDistro, $userLabel, $target)
+            Log ("Папка Codex в WSL (" + $WslDistro + $userLabel + "): " + $target)
         } else {
-            Log ("Папка Codex в WSL{0}: {1}" -f $userLabel, $target)
+            Log ("Папка Codex в WSL" + $userLabel + ": " + $target)
         }
         if ($wslHome) {
             Log "WSL HOME: $wslHome"
@@ -686,4 +686,4 @@ if ($SkipApiCheck) {
 
 Log ""
 Log "Перезапусти Codex Desktop, чтобы он перечитал provider config."
-Log ('Пример helper для генерации картинок: python "{0}" --list-presets' -f $ImageHelperPath)
+Log ("Пример helper для генерации картинок: python " + [char]34 + $ImageHelperPath + [char]34 + " --list-presets")

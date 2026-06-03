@@ -80,6 +80,32 @@ assert_count() {
   fi
 }
 
+assert_utf8_bom() {
+  local path="$1"
+  local label="$2"
+  local prefix
+  prefix="$(od -An -N3 -tx1 "$path" | tr -d ' \n')"
+  if [[ "$prefix" == 'efbbbf' ]]; then
+    pass "$label"
+  else
+    printf 'expected UTF-8 BOM, got prefix %s\n' "$prefix" >&2
+    fail "$label"
+  fi
+}
+
+assert_ascii_file() {
+  local path="$1"
+  local label="$2"
+  if LC_ALL=C grep -n '[^ -~[:space:]]' "$path" >/tmp/neurogate-ascii-check.$$ 2>/dev/null; then
+    cat /tmp/neurogate-ascii-check.$$ >&2
+    rm -f /tmp/neurogate-ascii-check.$$
+    fail "$label"
+  else
+    rm -f /tmp/neurogate-ascii-check.$$
+    pass "$label"
+  fi
+}
+
 make_fake_curl() {
   local bin_dir="$1"
   cat > "$bin_dir/curl" <<'FAKE_CURL'
@@ -607,6 +633,8 @@ test_desktop_bootstrap_downloads_and_runs_setup() {
 
 test_desktop_powershell_static_checks() {
   local invalid_var_colon adjacent_vars
+  assert_utf8_bom "$DESKTOP_PS" 'PowerShell setup is stored with UTF-8 BOM for Windows PowerShell 5'
+  assert_ascii_file "$DESKTOP_BOOTSTRAP_PS" 'PowerShell bootstrap stays ASCII-only for pipe execution'
   assert_contains "$DESKTOP_PS" 'https://api.neurogate.space/v1' 'PowerShell setup uses NeuroGate base URL'
   assert_contains "$DESKTOP_PS" 'responses_image.py' 'PowerShell setup installs image helper script'
   assert_contains "$DESKTOP_PS" '[switch]$NoWsl' 'PowerShell setup can skip WSL setup'
@@ -635,8 +663,29 @@ test_desktop_powershell_static_checks() {
   assert_not_contains_file "$DESKTOP_PS" '|| whoami' 'PowerShell setup avoids fragile shell fallback in embedded WSL script'
   assert_not_contains_file "$DESKTOP_PS" '$WslDistro$userLabel' 'PowerShell setup avoids adjacent variables in WSL log string'
   assert_not_contains_file "$DESKTOP_PS" 'Log "Пример helper для генерации картинок: python `"$ImageHelperPath`" --list-presets"' 'PowerShell setup avoids fragile escaped quotes in final helper log'
+  assert_not_contains_file "$DESKTOP_PS" '{0}{1}' 'PowerShell setup avoids format placeholders in WSL log string'
+  assert_not_contains_file "$DESKTOP_PS" '-f $WslDistro' 'PowerShell setup avoids format operator in WSL log string'
+  assert_not_contains_file "$DESKTOP_PS" '-f $ImageHelperPath' 'PowerShell setup avoids format operator in final helper log'
+  assert_contains "$DESKTOP_PS" '[char]34 + $ImageHelperPath + [char]34' 'PowerShell setup builds quoted helper example without escaped quotes or format placeholders'
   assert_contains "$DESKTOP_BOOTSTRAP_PS" 'setup-neurogate-codex-desktop.ps1' 'PowerShell bootstrap points to desktop setup'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" 'Add-CacheBust' 'PowerShell bootstrap cache-busts downloaded setup'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" '[System.Net.SecurityProtocolType]::Tls12' 'PowerShell bootstrap enables TLS 1.2 when available'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" 'Test-Path -LiteralPath $Url' 'PowerShell bootstrap supports local setup override paths'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" 'User-Agent' 'PowerShell bootstrap sends a stable user agent'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" 'DefaultNetworkCredentials' 'PowerShell bootstrap supports default proxy credentials'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" '$webClient.DownloadData($downloadUrl)' 'PowerShell bootstrap downloads setup as bytes'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" 'New-Object System.Text.UTF8Encoding -ArgumentList $false, $true' 'PowerShell bootstrap strictly decodes setup as UTF-8'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" '$strictUtf8.GetString($Bytes)' 'PowerShell bootstrap decodes setup as strict UTF-8'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" 'New-Object System.Text.UTF8Encoding -ArgumentList $true' 'PowerShell bootstrap writes temporary setup with UTF-8 BOM'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" 'Downloaded NeuroGate setup looks like HTML' 'PowerShell bootstrap rejects HTML error pages'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" 'Test-SetupScriptSyntax $tmp' 'PowerShell bootstrap validates setup syntax before execution'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" '[System.Management.Automation.PSParser]::Tokenize' 'PowerShell bootstrap uses parser preflight'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" 'Get-Command pwsh.exe' 'PowerShell bootstrap prefers PowerShell 7 when available'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" '"PowerShell\" + $version + "\pwsh.exe"' 'PowerShell bootstrap checks Program Files PowerShell paths'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" 'ProgramW6432' 'PowerShell bootstrap checks 64-bit Program Files from 32-bit hosts'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" '7-preview' 'PowerShell bootstrap can use PowerShell 7 preview if that is the only pwsh'
   assert_contains "$DESKTOP_BOOTSTRAP_PS" '-ExecutionPolicy Bypass -File $tmp' 'PowerShell bootstrap runs downloaded setup with execution policy bypass'
+  assert_not_contains_file "$DESKTOP_BOOTSTRAP_PS" 'Invoke-WebRequest -UseBasicParsing -Uri $setupUrl -OutFile $tmp' 'PowerShell bootstrap does not save raw UTF-8 without BOM'
   assert_not_contains_file "$DESKTOP_BOOTSTRAP_PS" '& $tmp @args' 'PowerShell bootstrap does not execute downloaded ps1 directly'
 
   invalid_var_colon="$(grep -Pn '\$[A-Za-z_][A-Za-z0-9_]*:' "$DESKTOP_PS" | grep -Pv '\$(env|global|script|local|private|using|variable|function):' || true)"
