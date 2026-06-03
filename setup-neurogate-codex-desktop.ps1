@@ -323,10 +323,10 @@ function Sanitize-Secret([string]$Text, [string]$ApiKey) {
 
     $clean = $Text
     if ($ApiKey) {
-        $clean = [regex]::Replace($clean, [regex]::Escape($ApiKey), "[redacted]")
+        $clean = [regex]::Replace($clean, [regex]::Escape($ApiKey), '[redacted]')
     }
-    $clean = [regex]::Replace($clean, "Bearer\s+[A-Za-z0-9._~+/=-]+", "Bearer [redacted]", "IgnoreCase")
-    $clean = [regex]::Replace($clean, "sk-[A-Za-z0-9_*.-]{8,}", "sk-[redacted]")
+    $clean = [regex]::Replace($clean, 'Bearer\s+[A-Za-z0-9._~+/=-]+', 'Bearer [redacted]', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $clean = [regex]::Replace($clean, 'sk-[A-Za-z0-9_*.-]{8,}', 'sk-[redacted]')
     return $clean
 }
 
@@ -523,12 +523,16 @@ chmod 700 "$codex_dir"
 
 backup_file() {
   local path="$1"
-  [[ -f "$path" ]] || return 0
+  if [[ ! -f "$path" ]]; then
+    return 0
+  fi
   local stamp backup
   stamp="$(date +%Y%m%d-%H%M%S)"
   backup="$path.bak-$stamp"
   cp "$path" "$backup"
-  chmod 600 "$backup" 2>/dev/null || true
+  if chmod 600 "$backup" 2>/dev/null; then
+    :
+  fi
 }
 
 write_if_changed() {
@@ -601,7 +605,18 @@ if [[ -n "$helper_body_b64" ]]; then
 fi
 
 printf 'codex_dir=%s\n' "$HOME/.codex"
-printf 'user=%s\n' "$(id -un 2>/dev/null || whoami)"
+wsl_user=""
+if command -v id >/dev/null 2>&1; then
+  if wsl_user="$(id -un 2>/dev/null)"; then
+    :
+  else
+    wsl_user=""
+  fi
+fi
+if [[ -z "$wsl_user" ]]; then
+  wsl_user="$(whoami)"
+fi
+printf 'user=%s\n' "$wsl_user"
 printf 'home=%s\n' "$HOME"
 '@
 
@@ -633,9 +648,9 @@ printf 'home=%s\n' "$HOME"
 
         $userLabel = if ($wslUser) { ", user $wslUser" } else { "" }
         if ($WslDistro) {
-            Log "Папка Codex в WSL ($WslDistro$userLabel): $target"
+            Log ("Папка Codex в WSL ({0}{1}): {2}" -f $WslDistro, $userLabel, $target)
         } else {
-            Log "Папка Codex в WSL${userLabel}: $target"
+            Log ("Папка Codex в WSL{0}: {1}" -f $userLabel, $target)
         }
         if ($wslHome) {
             Log "WSL HOME: $wslHome"
@@ -671,4 +686,4 @@ if ($SkipApiCheck) {
 
 Log ""
 Log "Перезапусти Codex Desktop, чтобы он перечитал provider config."
-Log "Пример helper для генерации картинок: python `"$ImageHelperPath`" --list-presets"
+Log ('Пример helper для генерации картинок: python "{0}" --list-presets' -f $ImageHelperPath)

@@ -606,7 +606,7 @@ test_desktop_bootstrap_downloads_and_runs_setup() {
 }
 
 test_desktop_powershell_static_checks() {
-  local invalid_var_colon
+  local invalid_var_colon adjacent_vars
   assert_contains "$DESKTOP_PS" 'https://api.neurogate.space/v1' 'PowerShell setup uses NeuroGate base URL'
   assert_contains "$DESKTOP_PS" 'responses_image.py' 'PowerShell setup installs image helper script'
   assert_contains "$DESKTOP_PS" '[switch]$NoWsl' 'PowerShell setup can skip WSL setup'
@@ -630,6 +630,11 @@ test_desktop_powershell_static_checks() {
   assert_contains "$DESKTOP_PS" 'Format-ApiCheckError $_ $ApiKey' 'PowerShell setup reports API check details'
   assert_contains "$DESKTOP_PS" 'Настройки записаны, но контрольный запрос к API не прошёл' 'PowerShell setup explains files stay written after API check failure'
   assert_contains "$DESKTOP_PS" 'Bearer [redacted]' 'PowerShell setup redacts bearer tokens in errors'
+  assert_not_contains_file "$DESKTOP_PS" '"sk-[A-Za-z0-9_*.-]{8,}"' 'PowerShell setup avoids PS5-sensitive regex quantifier in expandable string'
+  assert_not_contains_file "$DESKTOP_PS" '"Bearer\s+[A-Za-z0-9._~+/=-]+"' 'PowerShell setup avoids regex pattern in expandable string'
+  assert_not_contains_file "$DESKTOP_PS" '|| whoami' 'PowerShell setup avoids fragile shell fallback in embedded WSL script'
+  assert_not_contains_file "$DESKTOP_PS" '$WslDistro$userLabel' 'PowerShell setup avoids adjacent variables in WSL log string'
+  assert_not_contains_file "$DESKTOP_PS" 'Log "Пример helper для генерации картинок: python `"$ImageHelperPath`" --list-presets"' 'PowerShell setup avoids fragile escaped quotes in final helper log'
   assert_contains "$DESKTOP_BOOTSTRAP_PS" 'setup-neurogate-codex-desktop.ps1' 'PowerShell bootstrap points to desktop setup'
   assert_contains "$DESKTOP_BOOTSTRAP_PS" '-ExecutionPolicy Bypass -File $tmp' 'PowerShell bootstrap runs downloaded setup with execution policy bypass'
   assert_not_contains_file "$DESKTOP_BOOTSTRAP_PS" '& $tmp @args' 'PowerShell bootstrap does not execute downloaded ps1 directly'
@@ -640,6 +645,14 @@ test_desktop_powershell_static_checks() {
   else
     printf '%s\n' "$invalid_var_colon" >&2
     fail 'PowerShell setup has no unbraced variable before colon'
+  fi
+
+  adjacent_vars="$(grep -Pn '\$[A-Za-z_][A-Za-z0-9_]*\$[A-Za-z_][A-Za-z0-9_]*' "$DESKTOP_PS" || true)"
+  if [[ -z "$adjacent_vars" ]]; then
+    pass 'PowerShell setup has no adjacent expandable variables'
+  else
+    printf '%s\n' "$adjacent_vars" >&2
+    fail 'PowerShell setup has no adjacent expandable variables'
   fi
 
   if command -v pwsh >/dev/null 2>&1; then
