@@ -36,7 +36,7 @@ assert_contains() {
   local path="$1"
   local needle="$2"
   local label="$3"
-  if grep -Fq "$needle" "$path"; then
+  if grep -Fq -- "$needle" "$path"; then
     pass "$label"
   else
     fail "$label"
@@ -58,7 +58,7 @@ assert_not_contains_file() {
   local path="$1"
   local needle="$2"
   local label="$3"
-  if grep -Fq "$needle" "$path"; then
+  if grep -Fq -- "$needle" "$path"; then
     fail "$label"
   else
     pass "$label"
@@ -71,7 +71,7 @@ assert_count() {
   local expected="$3"
   local label="$4"
   local actual
-  actual="$(grep -F "$needle" "$path" | wc -l | tr -d ' ')"
+  actual="$(grep -F -- "$needle" "$path" | wc -l | tr -d ' ')"
   if [[ "$actual" == "$expected" ]]; then
     pass "$label"
   else
@@ -631,6 +631,8 @@ test_desktop_powershell_static_checks() {
   assert_contains "$DESKTOP_PS" 'Настройки записаны, но контрольный запрос к API не прошёл' 'PowerShell setup explains files stay written after API check failure'
   assert_contains "$DESKTOP_PS" 'Bearer [redacted]' 'PowerShell setup redacts bearer tokens in errors'
   assert_contains "$DESKTOP_BOOTSTRAP_PS" 'setup-neurogate-codex-desktop.ps1' 'PowerShell bootstrap points to desktop setup'
+  assert_contains "$DESKTOP_BOOTSTRAP_PS" '-ExecutionPolicy Bypass -File $tmp' 'PowerShell bootstrap runs downloaded setup with execution policy bypass'
+  assert_not_contains_file "$DESKTOP_BOOTSTRAP_PS" '& $tmp @args' 'PowerShell bootstrap does not execute downloaded ps1 directly'
 
   invalid_var_colon="$(grep -Pn '\$[A-Za-z_][A-Za-z0-9_]*:' "$DESKTOP_PS" | grep -Pv '\$(env|global|script|local|private|using|variable|function):' || true)"
   if [[ -z "$invalid_var_colon" ]]; then
