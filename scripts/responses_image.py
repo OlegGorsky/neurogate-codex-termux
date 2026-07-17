@@ -130,6 +130,11 @@ def selected_provider_config(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def resolve_config() -> Config:
+    if tomllib is None and not env("OPENAI_BASE_URL"):
+        raise ImageGenerationError(
+            "Python 3.11+ is required to read Codex config; set OPENAI_BASE_URL explicitly or upgrade Python"
+        )
+
     codex_config = load_codex_config()
     provider_config = selected_provider_config(codex_config)
     api_key = env("OPENAI_API_KEY") or load_codex_auth_key()
@@ -244,7 +249,7 @@ def request_json(config: Config, method: str, url: str, payload: dict[str, Any] 
 
 def parse_sse_events(body: str) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
-    for block in body.split("\n\n"):
+    for block in body.replace("\r\n", "\n").replace("\r", "\n").split("\n\n"):
         data_lines: list[str] = []
         for raw_line in block.splitlines():
             line = raw_line.strip()
@@ -424,7 +429,7 @@ def save_image(encoded: str, output_path: str) -> pathlib.Path:
 def write_metadata(path: pathlib.Path, job: ImageJob, config: Config, response: dict[str, Any]) -> pathlib.Path:
     metadata_path = path.with_suffix(path.suffix + ".json")
     metadata = {
-        "created_at": dt.datetime.now(dt.UTC).isoformat(),
+        "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "prompt": job.prompt,
         "action": job.action,
         "size": normalize_size(job.size),
@@ -586,6 +591,18 @@ def job_from_args(args: argparse.Namespace, action: str) -> ImageJob:
     )
 
 
+def jsonl_string_list(value: Any, line_number: int, field: str) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return value
+    raise ImageGenerationError(
+        f"Batch line {line_number} field {field} must be a string or an array of strings"
+    )
+
+
 def jobs_from_jsonl(path: str, out_dir: str, metadata: bool) -> list[ImageJob]:
     jobs: list[ImageJob] = []
     jsonl = pathlib.Path(path).expanduser()
@@ -609,18 +626,18 @@ def jobs_from_jsonl(path: str, out_dir: str, metadata: bool) -> list[ImageJob]:
             or data.get("out")
             or output_for_prompt(prompt, out_dir, output_format, data.get("slug"))
         )
-        action = str(data.get("action") or ("edit" if data.get("inputs") or data.get("input") else "generate"))
-        inputs = data.get("inputs") or data.get("input") or []
-        if isinstance(inputs, str):
-            inputs = [inputs]
+        inputs = jsonl_string_list(data.get("inputs") or data.get("input"), line_number, "inputs")
+        file_ids = jsonl_string_list(data.get("file_ids"), line_number, "file_ids")
+        data_urls = jsonl_string_list(data.get("data_urls"), line_number, "data_urls")
+        action = str(data.get("action") or ("edit" if inputs or file_ids or data_urls else "generate"))
         jobs.append(
             ImageJob(
                 prompt=prompt,
                 output=output,
                 action=action,
                 inputs=list(inputs),
-                file_ids=list(data.get("file_ids") or []),
-                data_urls=list(data.get("data_urls") or []),
+                file_ids=file_ids,
+                data_urls=data_urls,
                 mask=data.get("mask"),
                 size=data.get("size"),
                 quality=data.get("quality"),

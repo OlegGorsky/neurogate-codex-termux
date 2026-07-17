@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+unset CODEX_HOME
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$ROOT_DIR/setup-neurogate-codex-termux.sh"
 DESKTOP_SCRIPT="$ROOT_DIR/setup-neurogate-codex-desktop.sh"
@@ -404,6 +406,58 @@ TOML
   rm -rf "$tmp"
 }
 
+test_termux_switches_active_vibemode_provider() {
+  local tmp bin config output
+  tmp="$(mktemp -d)"
+  bin="$tmp/bin"
+  config="$tmp/codex/config.toml"
+  mkdir -p "$bin" "$(dirname "$config")"
+  make_fake_curl "$bin"
+
+  cat > "$config" <<'TOML'
+model = "gpt-5.6-terra"
+model_provider = "vibemode"
+model_reasoning_effort = "high"
+approval_policy = "never"
+
+[model_providers.vibemode]
+name = "vibemode"
+base_url = "https://api.vibemod.pro/v1"
+env_key = "CODEX_KEY"
+TOML
+
+  if ! output="$(CODEX_HOME="$tmp/codex" NEUROGATE_API_KEY='test-api-key' HOME="$tmp/home" PATH="$bin:$PATH" \
+    bash "$SCRIPT" --non-interactive 2>&1)"; then
+    printf '%s\n' "$output" >&2
+    fail 'Termux setup switches an active Vibemod provider'
+    rm -rf "$tmp"
+    return
+  fi
+  pass 'Termux setup switches an active Vibemod provider'
+
+  assert_count "$config" 'model_provider = "NeuroGate API"' '1' 'Termux switch selects one NeuroGate provider'
+  assert_count "$config" 'base_url = "https://api.neurogate.space/v1"' '1' 'Termux switch writes one NeuroGate endpoint'
+  assert_contains "$config" '[model_providers.vibemode]' 'Termux switch preserves inactive Vibemod provider config'
+  assert_contains "$config" 'approval_policy = "never"' 'Termux switch preserves unrelated root config'
+  if [[ "$output" == *'Активный provider: NeuroGate API'* \
+    && "$output" == *'Модель: gpt-5.5'* \
+    && "$output" == *'API base URL: https://api.neurogate.space/v1'* \
+    && "$output" == *'vibemode'* ]]; then
+    pass 'Termux switch reports the effective provider and endpoint'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'Termux switch reports the effective provider and endpoint'
+  fi
+  if [[ "$output" == *"Папка Codex: $tmp/codex"* ]]; then
+    pass 'Termux switch reports the effective CODEX_HOME'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'Termux switch reports the effective CODEX_HOME'
+  fi
+
+  rm -rf "$tmp"
+}
+
 test_reuses_existing_auth_key_non_interactive() {
   local tmp bin output auth
   tmp="$(mktemp -d)"
@@ -631,13 +685,14 @@ test_desktop_api_check_reports_safe_details() {
     printf '%s\n' "$output" >&2
     fail 'desktop setup reports safe API check details'
   fi
-  if [[ "$output" == *'NEUROGATE_REPLACE_KEY'* && "$output" == *'NEUROGATE_SKIP_API_CHECK'* ]]; then
+  if [[ "$output" == *'--replace-key'* && "$output" == *'NEUROGATE_SKIP_API_CHECK'* ]]; then
     pass 'desktop setup explains how to replace key or skip API check'
   else
     printf '%s\n' "$output" >&2
     fail 'desktop setup explains how to replace key or skip API check'
   fi
   assert_not_contains_text "$output" 'test-api-key' 'desktop API check error does not print API key'
+  assert_not_contains_text "$output" 'NEUROGATE_KEY_FROM_CLIPBOARD' 'desktop Bash API check hint avoids PowerShell-only variable'
   assert_not_contains_text "$output" 'Bearer abcdefgh' 'desktop API check error redacts bearer token'
   assert_not_contains_text "$output" 'sk-abcdefgh' 'desktop API check error redacts sk token'
 
@@ -1021,18 +1076,14 @@ test_image_helper_static_checks() {
 }
 
 test_image_helper_reads_selected_codex_provider() {
-  local tmp codex output
+  local tmp codex jobs output
   if ! command -v python3 >/dev/null 2>&1; then
     pass 'image helper Codex config check skipped without python3'
     return
   fi
-  if ! python3 -c 'import tomllib' >/dev/null 2>&1; then
-    pass 'image helper Codex config check skipped without tomllib'
-    return
-  fi
-
   tmp="$(mktemp -d)"
   codex="$tmp/home/.codex"
+  jobs="$tmp/jobs.jsonl"
   mkdir -p "$codex"
   cat > "$codex/auth.json" <<'JSON'
 {
@@ -1051,9 +1102,13 @@ base_url = "https://wrong.example/v1"
 base_url = "https://api.neurogate.space/v1"
 wire_api = "responses"
 TOML
+  cat > "$jobs" <<'JSONL'
+{"prompt":"p","input":"input.png","file_ids":"file-123","data_urls":"data:image/png;base64,AA=="}
+JSONL
 
-  if output="$(CODEX_HOME="$codex" python3 - "$ROOT_DIR/scripts/responses_image.py" <<'PY' 2>&1
+  if output="$(CODEX_HOME="$codex" JOBS_PATH="$jobs" python3 - "$ROOT_DIR/scripts/responses_image.py" <<'PY' 2>&1
 import importlib.util
+import os
 import sys
 
 script_path = sys.argv[1]
@@ -1062,10 +1117,11 @@ module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
-config = module.resolve_config()
-assert config.api_key == "existing-test-api-key"
-assert config.base_url == "https://api.neurogate.space/v1"
-assert config.model == "gpt-5.5"
+if module.tomllib is not None:
+    config = module.resolve_config()
+    assert config.api_key == "existing-test-api-key"
+    assert config.base_url == "https://api.neurogate.space/v1"
+    assert config.model == "gpt-5.5"
 tool = module.build_tool(module.ImageJob(prompt="p", output="out.png", compression="80"))
 assert tool["output_compression"] == 80
 try:
@@ -1074,6 +1130,49 @@ except module.ImageGenerationError:
     pass
 else:
     raise AssertionError("bad compression should fail")
+jobs = module.jobs_from_jsonl(os.environ["JOBS_PATH"], "out", True)
+assert jobs[0].action == "edit"
+assert jobs[0].inputs == ["input.png"]
+assert jobs[0].file_ids == ["file-123"]
+assert jobs[0].data_urls == ["data:image/png;base64,AA=="]
+file_id_jobs_path = os.path.join(os.path.dirname(os.environ["JOBS_PATH"]), "file-id-jobs.jsonl")
+with open(file_id_jobs_path, "w", encoding="utf-8") as fh:
+    fh.write('{"prompt":"p","file_ids":"file-123"}\n')
+assert module.jobs_from_jsonl(file_id_jobs_path, "out", True)[0].action == "edit"
+bad_jobs_path = os.path.join(os.path.dirname(os.environ["JOBS_PATH"]), "bad-jobs.jsonl")
+with open(bad_jobs_path, "w", encoding="utf-8") as fh:
+    fh.write('{"prompt":"p","file_ids":{"id":"file-123"}}\n')
+try:
+    module.jobs_from_jsonl(bad_jobs_path, "out", True)
+except module.ImageGenerationError as exc:
+    assert "field file_ids" in str(exc)
+else:
+    raise AssertionError("non-string JSONL file_ids should fail")
+assert module.parse_sse_events('data: {"id":"first"}\r\n\r\ndata: {"id":"second"}\r\n\r\n') == [
+    {"id": "first"},
+    {"id": "second"},
+]
+
+original_tomllib = module.tomllib
+original_base_url = os.environ.pop("OPENAI_BASE_URL", None)
+try:
+    module.tomllib = None
+    try:
+        module.resolve_config()
+    except module.ImageGenerationError as exc:
+        assert "Python 3.11+" in str(exc)
+    else:
+        raise AssertionError("missing explicit base URL should fail without tomllib")
+
+    os.environ["OPENAI_BASE_URL"] = "https://explicit.example/v1"
+    config = module.resolve_config()
+    assert config.base_url == "https://explicit.example/v1"
+finally:
+    module.tomllib = original_tomllib
+    if original_base_url is None:
+        os.environ.pop("OPENAI_BASE_URL", None)
+    else:
+        os.environ["OPENAI_BASE_URL"] = original_base_url
 print("config-ok")
 PY
 )"; then
@@ -1223,9 +1322,45 @@ test_termux_api_check_reports_safe_details() {
     printf '%s\n' "$output" >&2
     fail 'Termux setup reports safe API check details'
   fi
+  if [[ "$output" == *'--replace-key'* && "$output" == *'--skip-api-check'* ]]; then
+    pass 'Termux setup explains how to replace key or skip API check'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'Termux setup explains how to replace key or skip API check'
+  fi
   assert_not_contains_text "$output" 'test-api-key' 'Termux API check error does not print API key'
   assert_not_contains_text "$output" 'Bearer abcdefgh' 'Termux API check error redacts bearer token'
   assert_not_contains_text "$output" 'sk-abcdefgh' 'Termux API check error redacts sk token'
+
+  rm -rf "$tmp"
+}
+
+test_termux_setup_can_skip_api_check() {
+  local tmp bin output
+  tmp="$(mktemp -d)"
+  bin="$tmp/bin"
+  mkdir -p "$bin"
+  make_fake_api_error_curl "$bin"
+
+  if output="$(NEUROGATE_API_KEY='test-api-key' NEUROGATE_SKIP_API_CHECK='1' HOME="$tmp/home" PATH="$bin:$PATH" \
+    bash "$SCRIPT" --non-interactive 2>&1)"; then
+    pass 'Termux setup can skip API check from env'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'Termux setup can skip API check from env'
+    rm -rf "$tmp"
+    return
+  fi
+
+  assert_file "$tmp/home/.codex/config.toml" 'Termux skip writes config'
+  assert_file "$tmp/home/.codex/auth.json" 'Termux skip writes auth'
+  if [[ "$output" == *'Проверка /v1/models пропущена'* ]]; then
+    pass 'Termux skip reports skipped API check'
+  else
+    printf '%s\n' "$output" >&2
+    fail 'Termux skip reports skipped API check'
+  fi
+  assert_not_contains_text "$output" 'HTTP 401' 'Termux skip does not call API check'
 
   rm -rf "$tmp"
 }
@@ -1257,6 +1392,7 @@ test_bootstrap_downloads_and_runs_setup() {
 
 test_creates_files_and_reports_models
 test_repairs_config_idempotently
+test_termux_switches_active_vibemode_provider
 test_reuses_existing_auth_key_non_interactive
 test_desktop_setup_creates_config_and_image_helper
 test_desktop_setup_reuses_existing_auth_key
@@ -1277,6 +1413,7 @@ test_requires_key_when_non_interactive
 test_termux_setup_can_replace_existing_auth_key
 test_termux_setup_masks_direct_key_paste_over_existing_auth
 test_termux_api_check_reports_safe_details
+test_termux_setup_can_skip_api_check
 test_bootstrap_downloads_and_runs_setup
 test_image_helper_static_checks
 test_image_helper_reads_selected_codex_provider

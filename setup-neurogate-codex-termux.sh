@@ -10,6 +10,7 @@ NON_INTERACTIVE=0
 REPLACE_KEY="${NEUROGATE_REPLACE_KEY:-0}"
 MODEL="$DEFAULT_MODEL"
 API_KEY="${NEUROGATE_API_KEY:-${OPENAI_API_KEY:-}}"
+SKIP_API_CHECK="${NEUROGATE_SKIP_API_CHECK:-0}"
 
 usage() {
   cat <<USAGE
@@ -21,6 +22,7 @@ Usage:
 Options:
   --non-interactive     Do not prompt. Requires an env key or existing auth.json.
   --model MODEL         Codex model to write to config.toml. Default: gpt-5.5.
+  --skip-api-check      Write files without checking /v1/models.
   --replace-key         Ask for a new key instead of reusing auth.json.
   -h, --help            Show this help.
 
@@ -29,6 +31,7 @@ Environment:
   OPENAI_API_KEY        Fallback key variable for OpenAI-compatible tooling.
                          If neither is set, an existing auth.json key is reused.
   NEUROGATE_REPLACE_KEY Set to 1 to replace an existing auth.json key.
+  NEUROGATE_SKIP_API_CHECK Set to 1 to write files without checking /v1/models.
   CODEX_HOME            Optional Codex config directory. Default: ~/.codex.
 USAGE
 }
@@ -56,6 +59,10 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || die '--model требует значение'
       MODEL="$2"
       shift 2
+      ;;
+    --skip-api-check)
+      SKIP_API_CHECK=1
+      shift
       ;;
     --replace-key)
       REPLACE_KEY=1
@@ -380,6 +387,20 @@ JSON
   write_if_changed "$AUTH_FILE" "$tmp" 600
 }
 
+read_configured_provider() {
+  [[ -f "$CONFIG_FILE" ]] || return 0
+  awk '
+    /^[[:space:]]*\[/ { exit }
+    /^[[:space:]]*model_provider[[:space:]]*=/ {
+      value = $0
+      sub(/^[^=]*=[[:space:]]*/, "", value)
+      gsub(/^[[:space:]"]+|[[:space:]"]+$/, "", value)
+      print value
+      exit
+    }
+  ' "$CONFIG_FILE"
+}
+
 extract_models() {
   local json="$1"
 
@@ -442,6 +463,16 @@ trim_error_details() {
   printf '%s' "$text"
 }
 
+api_check_failure_hint() {
+  printf '%s' ' Подсказка: HTTP 401 обычно означает, что API-ключ не принят. Для замены ключа перезапусти установщик с --replace-key; чтобы только записать файлы без проверки /v1/models, используй --skip-api-check. Эта опция не исправляет обрывы /v1/responses во время работы Codex.'
+}
+
+report_effective_config() {
+  log "Активный provider: $PROVIDER_NAME"
+  log "Модель: $MODEL"
+  log "API base URL: $BASE_URL"
+}
+
 check_models() {
   local response models status curl_status response_file error_file error_text
   response_file="$(mktemp)"
@@ -463,17 +494,17 @@ check_models() {
   if [[ "$curl_status" -ne 0 ]]; then
     error_text="$(trim_error_details "$error_text")"
     if [[ -n "$error_text" ]]; then
-      die "не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл. Детали: $error_text"
+      die "не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл. Детали: $error_text$(api_check_failure_hint)"
     fi
-    die "не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл. curl exit code: $curl_status"
+    die "не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл. curl exit code: $curl_status$(api_check_failure_hint)"
   fi
 
   if [[ ! "$status" =~ ^2 ]]; then
     response="$(trim_error_details "$response")"
     if [[ -n "$response" ]]; then
-      die "не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл. Детали: HTTP $status | $response"
+      die "не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл. Детали: HTTP $status | $response$(api_check_failure_hint)"
     fi
-    die "не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл. Детали: HTTP $status"
+    die "не удалось проверить /v1/models. Настройки записаны, но контрольный запрос к API не прошёл. Детали: HTTP $status$(api_check_failure_hint)"
   fi
 
   models="$(extract_models "$response" | awk 'NF && !seen[$0]++')"
@@ -483,27 +514,40 @@ check_models() {
 }
 
 main() {
+  local previous_provider
+  previous_provider="$(read_configured_provider)"
+
   if ! is_termux; then
     warn 'это не похоже на Termux. Скрипт продолжит работу, потому что формат Codex-конфига такой же'
   fi
 
-  maybe_install_curl
+  if ! is_truthy "$SKIP_API_CHECK"; then
+    maybe_install_curl
+  fi
   read_api_key
 
   log "Папка Codex: $CODEX_DIR"
   write_config
   write_auth
+  if [[ -n "$previous_provider" && "$previous_provider" != "$PROVIDER_NAME" ]]; then
+    log "Активный provider переключён: $previous_provider -> $PROVIDER_NAME"
+  fi
+  report_effective_config
 
-  log 'Проверяю NeuroGate API через /v1/models...'
-  local models
-  models="$(check_models)"
+  if is_truthy "$SKIP_API_CHECK"; then
+    log 'Проверка /v1/models пропущена'
+  else
+    log 'Проверяю NeuroGate API через /v1/models...'
+    local models
+    models="$(check_models)"
 
-  log ''
-  log 'API готов'
-  log 'Доступные модели:'
-  while IFS= read -r model_id; do
-    [[ -n "$model_id" ]] && printf ' - %s\n' "$model_id"
-  done <<< "$models"
+    log ''
+    log 'API готов'
+    log 'Доступные модели:'
+    while IFS= read -r model_id; do
+      [[ -n "$model_id" ]] && printf ' - %s\n' "$model_id"
+    done <<< "$models"
+  fi
 
   if command -v codex >/dev/null 2>&1; then
     log ''

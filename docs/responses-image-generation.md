@@ -2,6 +2,8 @@
 
 В репозитории есть helper-скрипт [scripts/responses_image.py](../scripts/responses_image.py). Он работает без OpenAI SDK: читает ключ из `OPENAI_API_KEY` или `~/.codex/auth.json`, а URL и модель берёт из `OPENAI_BASE_URL`/`OPENAI_MODEL` или из активного провайдера в `~/.codex/config.toml`.
 
+Нужен Python 3.10 или новее. Для автоматического чтения `~/.codex/config.toml` нужен Python 3.11+; на Python 3.10 задай URL явно, например `OPENAI_BASE_URL=https://api.neurogate.space/v1 python3 scripts/responses_image.py --list-presets`.
+
 После запуска Termux или Desktop установщика скрипт автоматически использует:
 
 ```toml
@@ -11,6 +13,8 @@ model_provider = "NeuroGate API"
 base_url = "https://api.neurogate.space/v1"
 wire_api = "responses"
 ```
+
+Если ошибка Codex содержит `https://api.vibemod.pro/v1/responses`, запрос выполняет старый provider, а не этот helper через NeuroGate. Повторно запусти Termux-установщик, проверь напечатанный `API base URL`, полностью перезапусти Codex и при доступной команде выполни `codex doctor`: эффективный provider должен быть `NeuroGate API`.
 
 ## Установка helper-команды
 
