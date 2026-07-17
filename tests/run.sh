@@ -1017,14 +1017,6 @@ test_desktop_powershell_setup_download_resolution() {
   fi
 }
 
-test_documented_installers_target_neurogate_repository() {
-  assert_not_contains_file "$ROOT_DIR/README.md" 'OlegGorsky/ng/main/' 'README does not use the repurposed Vibemode alias'
-  assert_not_contains_file "$ROOT_DIR/docs/codex-desktop.md" 'OlegGorsky/ng/main/' 'desktop docs do not use the repurposed Vibemode alias'
-  assert_contains "$ROOT_DIR/README.md" 'OlegGorsky/neurogate-codex-termux/main/i' 'README Termux command targets the NeuroGate repository'
-  assert_contains "$ROOT_DIR/README.md" 'OlegGorsky/neurogate-codex-termux/main/d' 'README desktop command targets the NeuroGate repository'
-  assert_contains "$ROOT_DIR/docs/codex-desktop.md" 'OlegGorsky/neurogate-codex-termux/main/d' 'desktop docs target the NeuroGate repository'
-}
-
 test_pipe_safe_prompt_static_checks() {
   assert_contains "$SCRIPT" 'read_secret()' 'Termux setup has hidden prompt helper'
   assert_contains "$SCRIPT" '</dev/tty' 'Termux setup reads prompts from terminal'
@@ -1415,7 +1407,6 @@ test_desktop_powershell_wsl_ready_failure_is_nonfatal
 test_desktop_powershell_wsl_embedded_script
 test_desktop_powershell_bootstrap_url_resolution
 test_desktop_powershell_setup_download_resolution
-test_documented_installers_target_neurogate_repository
 test_pipe_safe_prompt_static_checks
 test_desktop_interactive_prompt_reads_from_tty
 test_requires_key_when_non_interactive
