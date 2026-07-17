@@ -456,7 +456,7 @@ trim_error_details() {
 }
 
 api_check_failure_hint() {
-  printf '%s' ' Подсказка: HTTP 401 обычно означает, что API-ключ не принят. Для замены ключа перезапусти установщик с --replace-key и введи новый ключ в prompt; чтобы только записать файлы без проверки, используй NEUROGATE_SKIP_API_CHECK=1.'
+  printf '%s' ' Подсказка: HTTP 401 обычно означает, что API-ключ не принят. Для короткой команды положи новый ключ в буфер и запусти с NEUROGATE_REPLACE_KEY=1 и NEUROGATE_KEY_FROM_CLIPBOARD=1; чтобы только записать файлы без проверки, используй NEUROGATE_SKIP_API_CHECK=1.'
 }
 
 check_models() {

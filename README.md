@@ -88,21 +88,11 @@ wire_api = "responses"
 $env:NEUROGATE_REPLACE_KEY='1'; $env:NEUROGATE_KEY_FROM_CLIPBOARD='1'; irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex; Remove-Item Env:\NEUROGATE_REPLACE_KEY; Remove-Item Env:\NEUROGATE_KEY_FROM_CLIPBOARD
 ```
 
-Повторить запись без контрольного запроса можно опцией `-SkipApiCheck` на Windows или `--skip-api-check` на Linux/macOS/Termux. В Termux короткая команда с пропуском проверки выглядит так:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash -s -- --skip-api-check
-```
-
-Эта опция пропускает только установочный `GET /v1/models`; она не исправляет обрывы потокового `POST /v1/responses` во время работы Codex.
-
-Для короткой Windows-команды:
+Повторить запись без контрольного запроса можно опцией `-SkipApiCheck` на Windows или `--skip-api-check` на Linux/macOS/Termux. Для короткой Windows-команды:
 
 ```powershell
 $env:NEUROGATE_SKIP_API_CHECK='1'; irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex; Remove-Item Env:\NEUROGATE_SKIP_API_CHECK
 ```
-
-Если Codex в Termux пишет `stream disconnected before completion` и в ошибке указан `https://api.vibemod.pro/v1/responses`, активен старый provider, а не NeuroGate. Перезапусти обычную Termux-установку: она переключит root `model_provider` и выведет итоговые provider, model, API URL и папку Codex. Затем полностью закрой старый процесс Codex и запусти `codex` снова. В актуальных версиях можно дополнительно проверить эффективный конфиг командой `codex doctor`; в строке `config` должен быть provider `NeuroGate API`, а не `vibemode`.
 
 При вставке в prompt ключ не показывается, но по количеству `*` видно, сколько символов считалось. Если в Windows вставка всё равно работает криво, скопируй ключ в буфер обмена и запусти:
 
@@ -138,12 +128,9 @@ Termux:
 curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/i | bash
 ```
 
-Установщик печатает фактические `CODEX_HOME`, provider, model и API URL. Если он переключил старый provider (например, `vibemode`), это также будет явно указано.
-
 ## Генерация изображений
 
 Desktop-setup ставит helper для `/responses` + `image_generation`.
-Helper требует Python 3.10+; для автоматического чтения Codex-конфига — Python 3.11+ (на Python 3.10 укажи `OPENAI_BASE_URL`).
 
 Ubuntu/Linux/macOS:
 
@@ -206,8 +193,6 @@ bash setup-neurogate-codex-termux.sh
 NEUROGATE_API_KEY='...' bash setup-neurogate-codex-desktop.sh --non-interactive
 NEUROGATE_API_KEY='...' bash setup-neurogate-codex-termux.sh --non-interactive
 ```
-
-Для Termux без установочной API-проверки можно также задать `NEUROGATE_SKIP_API_CHECK=1`; это эквивалент `--skip-api-check`.
 
 Выбрать другую модель:
 
