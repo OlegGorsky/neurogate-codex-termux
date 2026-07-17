@@ -11,20 +11,20 @@
 ## Ubuntu/Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/d | bash
+curl -fsSL https://raw.githubusercontent.com/OlegGorsky/neurogate-codex-termux/main/d | bash
 ```
 
 Если `curl` не установлен:
 
 ```bash
 sudo apt update && sudo apt install -y curl python3
-curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/d | bash
+curl -fsSL https://raw.githubusercontent.com/OlegGorsky/neurogate-codex-termux/main/d | bash
 ```
 
 ## macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/OlegGorsky/ng/main/d | bash
+curl -fsSL https://raw.githubusercontent.com/OlegGorsky/neurogate-codex-termux/main/d | bash
 ```
 
 Если Python не установлен, поставь его через Homebrew:
@@ -38,7 +38,7 @@ brew install python
 Открой PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex
+irm https://raw.githubusercontent.com/OlegGorsky/neurogate-codex-termux/main/d.ps1 | iex
 ```
 
 Скрипт сначала настраивает Windows-профиль Codex Desktop. Затем он проверяет `wsl.exe`; если WSL установлен и default distro уже инициализирован, туда записываются тот же `~/.codex/config.toml`, `~/.codex/auth.json` и helper `~/.local/bin/responses-image`.
@@ -50,7 +50,7 @@ irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex
 Если парольный prompt плохо принимает вставку, скопируй ключ в буфер обмена и запусти:
 
 ```powershell
-$env:NEUROGATE_KEY_FROM_CLIPBOARD='1'; irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex; Remove-Item Env:\NEUROGATE_KEY_FROM_CLIPBOARD
+$env:NEUROGATE_KEY_FROM_CLIPBOARD='1'; irm https://raw.githubusercontent.com/OlegGorsky/neurogate-codex-termux/main/d.ps1 | iex; Remove-Item Env:\NEUROGATE_KEY_FROM_CLIPBOARD
 ```
 
 ## Что меняется
@@ -82,13 +82,13 @@ wire_api = "responses"
 Если после записи файлов падает только проверка `/v1/models`, настройки уже сохранены. `HTTP 401` обычно означает, что API-ключ не принят сервером. Для принудительной замены ключа в Windows скопируй новый ключ в буфер и запусти:
 
 ```powershell
-$env:NEUROGATE_REPLACE_KEY='1'; $env:NEUROGATE_KEY_FROM_CLIPBOARD='1'; irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex; Remove-Item Env:\NEUROGATE_REPLACE_KEY; Remove-Item Env:\NEUROGATE_KEY_FROM_CLIPBOARD
+$env:NEUROGATE_REPLACE_KEY='1'; $env:NEUROGATE_KEY_FROM_CLIPBOARD='1'; irm https://raw.githubusercontent.com/OlegGorsky/neurogate-codex-termux/main/d.ps1 | iex; Remove-Item Env:\NEUROGATE_REPLACE_KEY; Remove-Item Env:\NEUROGATE_KEY_FROM_CLIPBOARD
 ```
 
 Для повторной записи без проверки можно запустить скрипт с `-SkipApiCheck`, но для реальной работы Codex ключ всё равно должен проходить авторизацию. Для короткой Windows-команды:
 
 ```powershell
-$env:NEUROGATE_SKIP_API_CHECK='1'; irm https://raw.githubusercontent.com/OlegGorsky/ng/main/d.ps1 | iex; Remove-Item Env:\NEUROGATE_SKIP_API_CHECK
+$env:NEUROGATE_SKIP_API_CHECK='1'; irm https://raw.githubusercontent.com/OlegGorsky/neurogate-codex-termux/main/d.ps1 | iex; Remove-Item Env:\NEUROGATE_SKIP_API_CHECK
 ```
 
 ## Окно авторизации Codex Desktop
